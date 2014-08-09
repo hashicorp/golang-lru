@@ -36,6 +36,14 @@ func New(size int) (*Cache, error) {
 	return c, nil
 }
 
+// Purge is used to completely clear the cache
+func (c *Cache) Purge() {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	c.evictList = list.New()
+	c.items = make(map[interface{}]*list.Element, c.size)
+}
+
 // Add adds a value to the cache.
 func (c *Cache) Add(key, value interface{}) {
 	c.lock.Lock()

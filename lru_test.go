@@ -34,4 +34,12 @@ func TestLRU(t *testing.T) {
 			t.Fatalf("should be deleted")
 		}
 	}
+
+	l.Purge()
+	if l.Len() != 0 {
+		t.Fatalf("bad len: %v", l.Len())
+	}
+	if _, ok := l.Get(200); ok {
+		t.Fatalf("should contain nothing")
+	}
 }
