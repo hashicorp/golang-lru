@@ -7,6 +7,7 @@ import (
 	"container/list"
 	"errors"
 	"sync"
+	"time"
 )
 
 // Cache is a thread-safe fixed size LRU cache.
@@ -44,9 +45,25 @@ func New(size int) (*Cache, error) {
 // Purge is used to completely clear the cache
 func (c *Cache) Purge() {
 	c.lock.Lock()
-	defer c.lock.Unlock()
-	c.evictList = list.New()
+	defer c.lock.Unlock()            
+	for c.Len() > 0 {
+        c.removeOldest()
+    }
+	c.items = nil
 	c.items = make(map[interface{}]*list.Element, c.size)
+}
+
+// Schedule routine purges. May be used to free up memory or 
+// ensure that the OnRemove function is called within a certain
+// amount of time.
+func (cache *Cache) ScheduleClear(d time.Duration) {
+    t := time.Tick(d)
+    for {
+        select {
+        case <-t:
+            cache.Purge()
+        }
+    }
 }
 
 // Add adds a value to the cache.
