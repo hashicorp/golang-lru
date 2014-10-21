@@ -15,6 +15,7 @@ type Cache struct {
 	evictList *list.List
 	items     map[interface{}]*list.Element
 	lock      sync.Mutex
+	onRemove  func(interface{})
 }
 
 // entry is used to hold a value in the evictList
@@ -28,10 +29,14 @@ func New(size int) (*Cache, error) {
 	if size <= 0 {
 		return nil, errors.New("Must provide a positive size")
 	}
+	onRemove := func(val interface{}) {
+		return
+	}
 	c := &Cache{
 		size:      size,
 		evictList: list.New(),
 		items:     make(map[interface{}]*list.Element, size),
+		onRemove:  onRemove,
 	}
 	return c, nil
 }
@@ -89,6 +94,11 @@ func (c *Cache) Remove(key interface{}) {
 	}
 }
 
+// Specify a function to run before deleting an item from the cache
+func (c *Cache) OnRemove(f func(interface{})) {
+	c.onRemove = f
+}
+
 // RemoveOldest removes the oldest item from the cache.
 func (c *Cache) RemoveOldest() {
 	c.lock.Lock()
@@ -100,7 +110,8 @@ func (c *Cache) RemoveOldest() {
 func (c *Cache) removeOldest() {
 	ent := c.evictList.Back()
 	if ent != nil {
-		c.removeElement(ent)
+	    c.onRemove(ent.Value.(*entry).value)
+	    c.removeElement(ent)
 	}
 }
 
