@@ -101,7 +101,7 @@ func (c *Cache) Keys() []interface{} {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	keys := make([]interface{}, c.size)
+	keys := make([]interface{}, len(c.items))
 	i := 0
 	for k := range c.items {
 		keys[i] = k
