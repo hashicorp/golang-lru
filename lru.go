@@ -96,7 +96,7 @@ func (c *Cache) RemoveOldest() {
 	c.removeOldest()
 }
 
-// Returns the keys of itmes in the cache.
+// Keys returns a slice of the keys in the cache.
 func (c *Cache) Keys() []interface{} {
 	c.lock.Lock()
 	defer c.lock.Unlock()
