@@ -96,6 +96,21 @@ func (c *Cache) RemoveOldest() {
 	c.removeOldest()
 }
 
+// Returns the keys of itmes in the cache.
+func (c *Cache) Keys() []interface{} {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	keys := make([]interface{}, c.size)
+	i := 0
+	for k := range c.items {
+		keys[i] = k
+		i++
+	}
+
+	return keys
+}
+
 // removeOldest removes the oldest item from the cache.
 func (c *Cache) removeOldest() {
 	ent := c.evictList.Back()
