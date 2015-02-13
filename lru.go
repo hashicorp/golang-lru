@@ -14,7 +14,7 @@ type Cache struct {
 	size      int
 	evictList *list.List
 	items     map[interface{}]*list.Element
-	lock      sync.Mutex
+	lock      sync.RWMutex
 }
 
 // entry is used to hold a value in the evictList
@@ -98,8 +98,8 @@ func (c *Cache) RemoveOldest() {
 
 // Keys returns a slice of the keys in the cache.
 func (c *Cache) Keys() []interface{} {
-	c.lock.Lock()
-	defer c.lock.Unlock()
+	c.lock.RLock()
+	defer c.lock.RUnlock()
 
 	keys := make([]interface{}, len(c.items))
 	i := 0
@@ -109,6 +109,13 @@ func (c *Cache) Keys() []interface{} {
 	}
 
 	return keys
+}
+
+// Len returns the number of items in the cache.
+func (c *Cache) Len() int {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	return c.evictList.Len()
 }
 
 // removeOldest removes the oldest item from the cache.
@@ -124,11 +131,4 @@ func (c *Cache) removeElement(e *list.Element) {
 	c.evictList.Remove(e)
 	kv := e.Value.(*entry)
 	delete(c.items, kv.key)
-}
-
-// Len returns the number of items in the cache.
-func (c *Cache) Len() int {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	return c.evictList.Len()
 }
