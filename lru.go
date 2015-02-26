@@ -15,6 +15,7 @@ type Cache struct {
 	evictList *list.List
 	items     map[interface{}]*list.Element
 	lock      sync.RWMutex
+	onEvicted func(key interface{}, value interface{})
 }
 
 // entry is used to hold a value in the evictList
@@ -38,10 +39,10 @@ func New(size int) (*Cache, error) {
 
 // Purge is used to completely clear the cache
 func (c *Cache) Purge() {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	c.evictList = list.New()
-	c.items = make(map[interface{}]*list.Element, c.size)
+	// Evict each element in the list.
+	for c.Len() > 0 {
+		c.RemoveOldest()
+	}
 }
 
 // Add adds a value to the cache.
@@ -131,4 +132,7 @@ func (c *Cache) removeElement(e *list.Element) {
 	c.evictList.Remove(e)
 	kv := e.Value.(*entry)
 	delete(c.items, kv.key)
+	if c.onEvicted != nil {
+		c.onEvicted(kv.key, kv.value)
+	}
 }

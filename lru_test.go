@@ -7,12 +7,23 @@ func TestLRU(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
+
+	evictCounter := 0
+	l.onEvicted = func(k interface{}, v interface{}) {
+		evictCounter += 1
+	}
+
 	for i := 0; i < 256; i++ {
 		l.Add(i, i)
 	}
 	if l.Len() != 128 {
 		t.Fatalf("bad len: %v", l.Len())
 	}
+
+	if evictCounter != 128 {
+		t.Fatalf("bad evict count: %v", evictCounter)
+	}
+
 	for _, k := range l.Keys() {
 		if v, ok := l.Get(k); !ok || v != k {
 			t.Fatalf("bad key: %v", k)
