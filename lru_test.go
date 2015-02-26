@@ -9,7 +9,7 @@ func TestLRU(t *testing.T) {
 	}
 
 	evictCounter := 0
-	l.onEvicted = func(k interface{}, v interface{}) {
+	l.OnEvicted = func(k interface{}, v interface{}) {
 		evictCounter += 1
 	}
 

@@ -15,7 +15,7 @@ type Cache struct {
 	evictList *list.List
 	items     map[interface{}]*list.Element
 	lock      sync.RWMutex
-	onEvicted func(key interface{}, value interface{})
+	OnEvicted func(key interface{}, value interface{})
 }
 
 // entry is used to hold a value in the evictList
@@ -132,7 +132,7 @@ func (c *Cache) removeElement(e *list.Element) {
 	c.evictList.Remove(e)
 	kv := e.Value.(*entry)
 	delete(c.items, kv.key)
-	if c.onEvicted != nil {
-		c.onEvicted(kv.key, kv.value)
+	if c.OnEvicted != nil {
+		c.OnEvicted(kv.key, kv.value)
 	}
 }
