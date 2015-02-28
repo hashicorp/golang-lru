@@ -47,9 +47,9 @@ func (c *Cache) Purge() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	e := c.evictList.Front()
+	e := c.evictList.Back()
 	for e != nil {
-		n := e.Next()
+		n := e.Prev()
 		c.removeElement(e)
 		e = n
 	}
