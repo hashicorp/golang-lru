@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-type FillFunc func() (interface{}, time.Time)
+type FillFunc func(key interface{}) (interface{}, time.Time, error)
 
 // Cache is a thread-safe fixed size LRU cache.
 type FillingCache struct {
@@ -18,8 +18,7 @@ type FillingCache struct {
 	evictList *list.List
 	items     map[interface{}]*list.Element
 	lock      sync.RWMutex
-
-	fill func(key interface{}) (interface{}, time.Time, error)
+	fill      FillFunc
 }
 
 // entry is used to hold a value in the evictList
@@ -32,7 +31,7 @@ type exp_entry struct {
 }
 
 // New creates an LRU of the given size
-func NewFilling(size int) (*FillingCache, error) {
+func NewFilling(size int, f FillFunc) (*FillingCache, error) {
 	if size <= 0 {
 		return nil, errors.New("Must provide a positive size")
 	}
@@ -40,6 +39,7 @@ func NewFilling(size int) (*FillingCache, error) {
 		size:      size,
 		evictList: list.New(),
 		items:     make(map[interface{}]*list.Element, size),
+		fill:      f,
 	}
 	return c, nil
 }

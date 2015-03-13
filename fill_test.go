@@ -8,13 +8,11 @@ import (
 
 func TestFillingLRU(t *testing.T) {
 
-	l, err := NewFilling(1)
 	i := 0
-
-	l.fill = func(key interface{}) (interface{}, time.Time, error) {
+	l, err := NewFilling(1, func(key interface{}) (interface{}, time.Time, error) {
 		i++
 		return i, time.Now().Add(time.Second), nil
-	}
+	})
 
 	//should fill
 	val, err := l.Get("asdf")
@@ -56,13 +54,11 @@ func TestFillingLRU(t *testing.T) {
 //Test thundering horde
 func TestFillingLRUThunderingHorde(t *testing.T) {
 
-	l, _ := NewFilling(1)
 	i := 0
-
-	l.fill = func(key interface{}) (interface{}, time.Time, error) {
+	l, _ := NewFilling(1, func(key interface{}) (interface{}, time.Time, error) {
 		i++
 		return i, time.Now().Add(time.Second), nil
-	}
+	})
 
 	wg := sync.WaitGroup{}
 	for i := 0; i < 100; i++ {
@@ -86,13 +82,11 @@ func TestFillingLRUThunderingHorde(t *testing.T) {
 
 func TestFillingLRUThunderingHordeBadExpiration(t *testing.T) {
 
-	l, _ := NewFilling(1)
 	i := 0
-
-	l.fill = func(key interface{}) (interface{}, time.Time, error) {
+	l, _ := NewFilling(1, func(key interface{}) (interface{}, time.Time, error) {
 		i++
 		return i, time.Now().Add(-time.Second), nil
-	}
+	})
 
 	wg := sync.WaitGroup{}
 
