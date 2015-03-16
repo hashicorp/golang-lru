@@ -57,8 +57,8 @@ func (c *Cache) Purge() {
 	c.items = make(map[interface{}]*list.Element, c.size)
 }
 
-// Add adds a value to the cache.
-func (c *Cache) Add(key, value interface{}) {
+// Add adds a value to the cache.  Returns true if an eviction occured.
+func (c *Cache) Add(key, value interface{}) bool {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -66,7 +66,7 @@ func (c *Cache) Add(key, value interface{}) {
 	if ent, ok := c.items[key]; ok {
 		c.evictList.MoveToFront(ent)
 		ent.Value.(*entry).value = value
-		return
+		return false
 	}
 
 	// Add new item
@@ -74,10 +74,12 @@ func (c *Cache) Add(key, value interface{}) {
 	entry := c.evictList.PushFront(ent)
 	c.items[key] = entry
 
+	evict := c.evictList.Len() > c.size
 	// Verify size not exceeded
-	if c.evictList.Len() > c.size {
+	if evict {
 		c.removeOldest()
 	}
+	return evict
 }
 
 // Get looks up a key's value from the cache.
