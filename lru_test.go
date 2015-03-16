@@ -56,3 +56,23 @@ func TestLRU(t *testing.T) {
 		t.Fatalf("should contain nothing")
 	}
 }
+
+// test that Add return true/false if an eviction occured
+func TestLRUAdd(t *testing.T) {
+	evictCounter := 0
+	onEvicted := func(k interface{}, v interface{}) {
+		evictCounter += 1
+	}
+
+	l, err := NewWithEvict(1, onEvicted)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	if l.Add(1,1) == true || evictCounter != 0 {
+		t.Errorf("should not have an eviction")
+	}
+	if l.Add(2,2) == false || evictCounter != 1 {
+		t.Errorf("should have an eviction")
+	}
+}
