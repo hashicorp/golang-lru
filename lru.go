@@ -15,6 +15,7 @@ type Cache struct {
 	evictList *list.List
 	items     map[interface{}]*list.Element
 	lock      sync.RWMutex
+	onEvicted func(key interface{}, value interface{})
 }
 
 // entry is used to hold a value in the evictList
@@ -25,6 +26,10 @@ type entry struct {
 
 // New creates an LRU of the given size
 func New(size int) (*Cache, error) {
+	return NewWithEvict(size, nil)
+}
+
+func NewWithEvict(size int, onEvicted func(key interface{}, value interface{})) (*Cache, error) {
 	if size <= 0 {
 		return nil, errors.New("Must provide a positive size")
 	}
@@ -32,6 +37,7 @@ func New(size int) (*Cache, error) {
 		size:      size,
 		evictList: list.New(),
 		items:     make(map[interface{}]*list.Element, size),
+		onEvicted: onEvicted,
 	}
 	return c, nil
 }
@@ -40,6 +46,13 @@ func New(size int) (*Cache, error) {
 func (c *Cache) Purge() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
+	if c.onEvicted != nil {
+		for k, v := range c.items {
+			c.onEvicted(k, v.Value)
+		}
+	}
+
 	c.evictList = list.New()
 	c.items = make(map[interface{}]*list.Element, c.size)
 }
@@ -131,4 +144,7 @@ func (c *Cache) removeElement(e *list.Element) {
 	c.evictList.Remove(e)
 	kv := e.Value.(*entry)
 	delete(c.items, kv.key)
+	if c.onEvicted != nil {
+		c.onEvicted(kv.key, kv.value)
+	}
 }

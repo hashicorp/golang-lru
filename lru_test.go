@@ -3,16 +3,26 @@ package lru
 import "testing"
 
 func TestLRU(t *testing.T) {
-	l, err := New(128)
+	evictCounter := 0
+	onEvicted := func(k interface{}, v interface{}) {
+		evictCounter += 1
+	}
+	l, err := NewWithEvict(128, onEvicted)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
+
 	for i := 0; i < 256; i++ {
 		l.Add(i, i)
 	}
 	if l.Len() != 128 {
 		t.Fatalf("bad len: %v", l.Len())
 	}
+
+	if evictCounter != 128 {
+		t.Fatalf("bad evict count: %v", evictCounter)
+	}
+
 	for _, k := range l.Keys() {
 		if v, ok := l.Get(k); !ok || v != k {
 			t.Fatalf("bad key: %v", k)
