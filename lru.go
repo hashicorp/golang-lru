@@ -47,12 +47,14 @@ func (c *Cache) Purge() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	e := c.evictList.Back()
-	for e != nil {
-		n := e.Prev()
-		c.removeElement(e)
-		e = n
+	if c.onEvicted != nil {
+		for k, v := range c.items {
+			c.onEvicted(k, v.Value)
+		}
 	}
+
+	c.evictList = list.New()
+	c.items = make(map[interface{}]*list.Element, c.size)
 }
 
 // Add adds a value to the cache.
