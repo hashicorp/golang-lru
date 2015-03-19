@@ -5,24 +5,37 @@ package lru
 
 import (
 	"container/list"
-	"errors"
 	"sync"
 	"time"
 )
 
-type FillFunc func(key interface{}) (interface{}, time.Time, error)
+type Filler interface {
+	// Fill returns the value and expiration time of the given key.
+	// When Fill fails to get the key, it can return a non-zero expiration to cache the error entry.
+	Fill(key interface{}) (value interface{}, expiration time.Time, err error)
+}
 
-// Cache is a thread-safe fixed size LRU cache.
+type FillFunc func(key interface{}) (value interface{}, expiration time.Time, err error)
+
+func (ff FillFunc) Fill(key interface{}) (value interface{}, expiration time.Time, err error) {
+	return ff(key)
+}
+
+// FillingCache is a LRU cache. It fills an entry the first time the entry is
+// retrieved.  It ensures the entry is filled once even when the entry is
+// retrieved by multiple clients.  An entry may expire. An expired entry goes
+// through the filling process the same as a new entry.
+// Note that if Fill fails, the error entry is cached.
 type FillingCache struct {
 	size      int
 	evictList *list.List
 	items     map[interface{}]*list.Element
 	lock      sync.RWMutex
-	fill      FillFunc
+	filler    Filler
 }
 
-// entry is used to hold a value in the evictList
-type exp_entry struct {
+// expirableEntry holds a value in the evictList
+type expirableEntry struct {
 	key   interface{}
 	value interface{}
 	exp   time.Time
@@ -30,74 +43,80 @@ type exp_entry struct {
 	wg    sync.WaitGroup
 }
 
-// New creates an LRU of the given size
-func NewFilling(size int, f FillFunc) (*FillingCache, error) {
+// NewFillingCache returns a FillingCache of the given size.
+func NewFillingCache(size int, fr Filler) *FillingCache {
 	if size <= 0 {
-		return nil, errors.New("Must provide a positive size")
+		panic("invalid cache size")
 	}
-	c := &FillingCache{
+	return &FillingCache{
 		size:      size,
 		evictList: list.New(),
 		items:     make(map[interface{}]*list.Element, size),
-		fill:      f,
+		filler:    fr,
 	}
-	return c, nil
 }
 
 // looks up a key's value from the cache, if it is not present get it
 func (c *FillingCache) Get(key interface{}) (value interface{}, err error) {
-	c.lock.Lock()
+	entry, tofill := c.getEntry(key)
 
-	entry, ok := c.items[key]
-	if ok {
-		c.lock.Unlock()
-		casted := entry.Value.(*exp_entry)
-		casted.wg.Wait()
-
-		if time.Now().Before(casted.exp) {
-			c.evictList.MoveToFront(entry)
-			return casted.value, casted.err
+	if tofill {
+		value, exp, err := c.filler.Fill(key)
+		if exp.IsZero() {
+			// zero expiration means it is already expired.
+			// The entry will be removed when the key is accessed the next time.
+			exp = time.Now().Add(-time.Hour)
 		}
 
-		//in the case where multiple clients are waiting,
-		//and then they receive an expired object
-		//they will now thunder (They will all try to get the value)
-		//thats a really unlikely failure
 		c.lock.Lock()
+		entry.value = value
+		if !entry.exp.IsZero() {
+			panic("BUG: entry.exp is set while it is being filled")
+		}
+		entry.exp = exp
+		entry.err = err
+		c.lock.Unlock()
+		entry.wg.Done() // signal other clients
+		return value, err
 	}
 
-	casted := &exp_entry{key: key}
-	casted.wg.Add(1) //stop clients from returning with stale data
+	// always access entry after it is filled
+	entry.wg.Wait()
+	return entry.value, entry.err
+}
 
-	entry = c.evictList.PushFront(casted)
-	c.items[key] = entry
-
-	//free up the map while we fetch our object
-	c.lock.Unlock()
-	casted.value, casted.exp, casted.err = c.fill(key)
-	casted.wg.Done()
-
-	//re-lock to trim set
+func (c *FillingCache) getEntry(key interface{}) (entry *expirableEntry, tofill bool) {
 	c.lock.Lock()
+	defer c.lock.Unlock()
+	item, ok := c.items[key]
+	if ok {
+		entry = item.Value.(*expirableEntry)
+		c.evictList.Remove(item)
+	}
+	if !ok || (!entry.exp.IsZero() && entry.exp.Before(time.Now())) {
+		// if the entry is not found or already expired, add a new entry.
+		// the first client that adds the entry fills the entry
+		entry = &expirableEntry{key: key}
+		entry.wg.Add(1)
+		tofill = true
+	}
+	// either add the new entry or move an existing entry to the front
+	c.items[key] = c.evictList.PushFront(entry)
+
+	// TODO: remove the expired entries instead of the oldest one.
 	if c.evictList.Len() > c.size {
 		c.removeOldest()
 	}
-	c.lock.Unlock()
-
-	return casted.value, casted.err
+	return entry, tofill
 }
 
 // removeOldest removes the oldest item from the cache.
 func (c *FillingCache) removeOldest() {
-	ent := c.evictList.Back()
-	if ent != nil {
-		c.removeElement(ent)
+	item := c.evictList.Back()
+	if item == nil {
+		return
 	}
-}
-
-// removeElement is used to remove a given list element from the cache
-func (c *FillingCache) removeElement(e *list.Element) {
-	c.evictList.Remove(e)
-	kv := e.Value.(*exp_entry)
-	delete(c.items, kv.key)
+	c.evictList.Remove(item)
+	entry := item.Value.(*expirableEntry)
+	delete(c.items, entry.key)
 }
