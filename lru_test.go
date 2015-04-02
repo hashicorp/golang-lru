@@ -23,8 +23,8 @@ func TestLRU(t *testing.T) {
 		t.Fatalf("bad evict count: %v", evictCounter)
 	}
 
-	for _, k := range l.Keys() {
-		if v, ok := l.Get(k); !ok || v != k {
+	for i, k := range l.Keys() {
+		if v, ok := l.Get(k); !ok || v != k || v != i+128 {
 			t.Fatalf("bad key: %v", k)
 		}
 	}
@@ -45,6 +45,14 @@ func TestLRU(t *testing.T) {
 		_, ok := l.Get(i)
 		if ok {
 			t.Fatalf("should be deleted")
+		}
+	}
+
+	l.Get(192) // expect 192 to be last key in l.Keys()
+
+	for i, k := range l.Keys() {
+		if (i < 63 && k != i+193) || (i == 63 && k != 192) {
+			t.Fatalf("out of order key: %v", k)
 		}
 	}
 
