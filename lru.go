@@ -111,15 +111,17 @@ func (c *Cache) RemoveOldest() {
 	c.removeOldest()
 }
 
-// Keys returns a slice of the keys in the cache.
+// Keys returns a slice of the keys in the cache, from oldest to newest.
 func (c *Cache) Keys() []interface{} {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
 	keys := make([]interface{}, len(c.items))
+	ent := c.evictList.Back()
 	i := 0
-	for k := range c.items {
-		keys[i] = k
+	for ent != nil {
+		keys[i] = ent.Value.(*entry).key
+		ent = ent.Prev()
 		i++
 	}
 
