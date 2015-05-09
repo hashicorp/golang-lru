@@ -106,17 +106,20 @@ func (c *Cache) Add(key, value interface{}) {
     }
 }
 
-<<<<<<< HEAD
+// Allows for making changes to a value in the cache.
+// Returns a boolean indicating whether the key was found.
 func (c *Cache) Update(key interface{}, f func(val interface{})) bool {
-        c.lock.Lock()
-        defer c.lock.Unlock()
-	if _, ok := c.items[key]; !ok {
-		return false
-	}
-	f(c.items[key].Value.(*entry).value)
-	return true
-=======
-// Allows for making changes to a value in the cache 
+    ent, ok := c.items[key]
+    if !ok {
+        return false
+    }
+    f(ent.Value.(*entry).value)
+    entry := c.evictList.PushFront(ent)
+    c.items[key] = entry
+    return true
+}
+
+// UpdateWithoutReorder() works like Update()
 // without pushing it back to the front of the list. 
 // Maintains order of Least Recently Used.
 func (c *Cache) UpdateWithoutReorder(key interface{}, f func(val interface{})) bool {
@@ -126,7 +129,6 @@ func (c *Cache) UpdateWithoutReorder(key interface{}, f func(val interface{})) b
     }
     f(ent.Value.(*entry).value)
     return true
->>>>>>> 5846a05... Allow limiting by size or bytecount
 }
 
 // Get looks up a key's value from the cache.
