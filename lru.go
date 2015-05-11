@@ -113,8 +113,11 @@ func (c *Cache) Add(key, value interface{}) {
     c.bytes += getByteCount(value)
 
     // Verify size not exceeded
-    if (c.maxItems > 0 && c.evictList.Len() > c.maxItems) || (c.maxBytes > 0 && c.bytes > c.maxBytes) {
+    if c.maxItems > 0 && c.evictList.Len() > c.maxItems {
         c.removeOldest()
+    }
+    for c.maxBytes > 0 && c.bytes > c.maxBytes {
+    	c.removeOldest()
     }
 }
 
