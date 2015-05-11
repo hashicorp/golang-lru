@@ -8,6 +8,9 @@ import (
     "errors"
     "sync"
     "time"
+    "encoding/gob"
+    "bytes"
+    "log"
 )
 
 // Cache is a thread-safe fixed size LRU cache.
@@ -23,8 +26,8 @@ type Cache struct {
 
 // entry is used to hold a value in the evictList
 type entry struct {
-    key   interface{}
-    value interface{}
+    Key   interface{}
+    Value interface{}
 }
 
 // New creates an LRU cache. It accepts a maximum size limit
@@ -77,6 +80,17 @@ func (cache *Cache) ScheduleClear(d time.Duration) {
     }
 }
 
+func getByteCount(key interface{}) int64 {
+    var buf bytes.Buffer
+    enc := gob.NewEncoder(&buf)
+    err := enc.Encode(key)
+    if err != nil {
+    	log.Println(err)
+        return int64(0)
+    }
+    return int64(len(buf.Bytes()))
+}
+
 // Add adds a value to the cache. If the new value causes the
 // set maxItems or maxBytes values to be exceeded, then the
 // least recently used item will be popped from the cache and 
@@ -88,7 +102,7 @@ func (c *Cache) Add(key, value interface{}) {
     // Check for existing item
     if ent, ok := c.items[key]; ok {
         c.evictList.MoveToFront(ent)
-        ent.Value.(*entry).value = value
+        ent.Value.(*entry).Value = value
         return
     }
 
@@ -96,9 +110,7 @@ func (c *Cache) Add(key, value interface{}) {
     ent := &entry{key, value}
     entry := c.evictList.PushFront(ent)
     c.items[key] = entry
-
-    buf := value.([]byte)
-    c.bytes += int64(len(buf))
+    c.bytes += getByteCount(value)
 
     // Verify size not exceeded
     if (c.maxItems > 0 && c.evictList.Len() > c.maxItems) || (c.maxBytes > 0 && c.bytes > c.maxBytes) {
@@ -113,7 +125,7 @@ func (c *Cache) Update(key interface{}, f func(val interface{})) bool {
     if !ok {
         return false
     }
-    f(ent.Value.(*entry).value)
+    f(ent.Value.(*entry).Value)
     entry := c.evictList.PushFront(ent)
     c.items[key] = entry
     return true
@@ -127,7 +139,7 @@ func (c *Cache) UpdateWithoutReorder(key interface{}, f func(val interface{})) b
     if !ok {
         return false
     }
-    f(ent.Value.(*entry).value)
+    f(ent.Value.(*entry).Value)
     return true
 }
 
@@ -138,7 +150,7 @@ func (c *Cache) Get(key interface{}) (value interface{}, ok bool) {
 
     if ent, ok := c.items[key]; ok {
         c.evictList.MoveToFront(ent)
-        return ent.Value.(*entry).value, true
+        return ent.Value.(*entry).Value, true
     }
     return
 }
@@ -172,7 +184,7 @@ func (c *Cache) removeOldest() {
     ent := c.evictList.Back()
     if ent != nil {
         c.removeElement(ent)
-        c.onRemove(ent.Value.(*entry).value)
+        c.onRemove(ent.Value.(*entry).Value)
     }
 }
 
@@ -180,10 +192,9 @@ func (c *Cache) removeOldest() {
 func (c *Cache) removeElement(e *list.Element) {
     c.evictList.Remove(e)
     kv := e.Value.(*entry)
-    c.items[kv.key] = nil  // force garbage collection
-    delete(c.items, kv.key)
-    buf := e.Value.([]byte)
-    c.bytes -= int64(len(buf))
+    c.bytes -= getByteCount(e.Value)
+    c.items[kv.Key] = nil  // force garbage collection
+    delete(c.items, kv.Key)
 }
 
 // Len returns the number of items in the cache.
