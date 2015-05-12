@@ -5,6 +5,9 @@ import "testing"
 func TestLRU(t *testing.T) {
 	evictCounter := 0
 	onEvicted := func(k interface{}, v interface{}) {
+		if k != v {
+			t.Fatalf("Evict values not equal (%v!=%v)", k, v)
+		}
 		evictCounter += 1
 	}
 	l, err := NewWithEvict(128, onEvicted)
