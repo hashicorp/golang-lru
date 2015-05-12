@@ -49,7 +49,7 @@ func (c *Cache) Purge() {
 
 	if c.onEvicted != nil {
 		for k, v := range c.items {
-			c.onEvicted(k, v.Value)
+			c.onEvicted(k, v.Value.(*entry).value)
 		}
 	}
 
