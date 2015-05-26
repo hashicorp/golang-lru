@@ -84,8 +84,8 @@ func (c *Cache) Add(key, value interface{}) bool {
 
 // Get looks up a key's value from the cache.
 func (c *Cache) Get(key interface{}) (value interface{}, ok bool) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
+	c.lock.RLock()
+	defer c.lock.RUnlock()
 
 	if ent, ok := c.items[key]; ok {
 		c.evictList.MoveToFront(ent)
