@@ -47,17 +47,15 @@ func (c *Cache) Purge() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	if c.onEvicted != nil {
-		for k, v := range c.items {
+	for k, v := range c.items {
+		if c.onEvicted != nil {
 			c.onEvicted(k, v.Value.(*entry).value)
 		}
+
+		delete(c.items, k)
 	}
 
 	c.evictList.Init()
-
-	for k := range c.items {
-		delete(c.items, k)
-	}
 }
 
 // Add adds a value to the cache.  Returns true if an eviction occured.
