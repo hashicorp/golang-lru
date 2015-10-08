@@ -53,8 +53,11 @@ func (c *Cache) Purge() {
 		}
 	}
 
-	c.evictList = list.New()
-	c.items = make(map[interface{}]*list.Element, c.size)
+	c.evictList.Init()
+
+	for k := range c.items {
+		delete(c.items, k)
+	}
 }
 
 // Add adds a value to the cache.  Returns true if an eviction occured.
