@@ -122,7 +122,7 @@ func (c *ARCCache) Add(key, value interface{}) {
 
 		// Potentially need to make room in the cache
 		if c.t1.Len()+c.t2.Len() >= c.size {
-			c.replace(key)
+			c.replace(false)
 		}
 
 		// Remove from B1
@@ -151,7 +151,7 @@ func (c *ARCCache) Add(key, value interface{}) {
 
 		// Potentially need to make room in the cache
 		if c.t1.Len()+c.t2.Len() >= c.size {
-			c.replace(key)
+			c.replace(true)
 		}
 
 		// Remove from B2
@@ -170,7 +170,7 @@ func (c *ARCCache) Add(key, value interface{}) {
 			c.t1.RemoveOldest()
 		} else {
 			c.b1.RemoveOldest()
-			c.replace(key)
+			c.replace(false)
 		}
 	} else {
 		t2Len := c.t2.Len()
@@ -180,7 +180,7 @@ func (c *ARCCache) Add(key, value interface{}) {
 			if total == 2*c.size {
 				c.b2.RemoveOldest()
 			}
-			c.replace(key)
+			c.replace(false)
 		}
 	}
 
@@ -191,9 +191,9 @@ func (c *ARCCache) Add(key, value interface{}) {
 
 // replace is used to adaptively evict from either T1 or T2
 // based on the current learned value of P
-func (c *ARCCache) replace(key interface{}) {
+func (c *ARCCache) replace(b2ContainsKey bool) {
 	t1Len := c.t1.Len()
-	if t1Len > 0 && (t1Len > c.p || (t1Len == c.p && c.b2.Contains(key))) {
+	if t1Len > 0 && (t1Len > c.p || (t1Len == c.p && b2ContainsKey)) {
 		c.t1.RemoveOldest()
 	} else {
 		c.t2.RemoveOldest()
