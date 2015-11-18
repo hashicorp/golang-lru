@@ -114,8 +114,10 @@ func (c *ARCCache) Add(key, value interface{}) {
 			c.p += delta
 		}
 
-		// Make room in the cache
-		c.replace(key)
+		// Potentially need to make room in the cache
+		if c.t1.Len()+c.t2.Len() >= c.size {
+			c.replace(key)
+		}
 
 		// Remove from B1
 		c.b1.Remove(key)
@@ -141,8 +143,10 @@ func (c *ARCCache) Add(key, value interface{}) {
 			c.p -= delta
 		}
 
-		// Make room in the cache
-		c.replace(key)
+		// Potentially need to make room in the cache
+		if c.t1.Len()+c.t2.Len() >= c.size {
+			c.replace(key)
+		}
 
 		// Remove from B2
 		c.b2.Remove(key)
