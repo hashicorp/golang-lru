@@ -64,6 +64,9 @@ func NewARC(size int) (*ARCCache, error) {
 
 // Get looks up a key's value from the cache.
 func (c *ARCCache) Get(key interface{}) (interface{}, bool) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
 	// Check if the value is contained in T1 (recent), and potentially
 	// promote it to frequent T2
 	if val, ok := c.t1.Peek(key); ok {
@@ -84,6 +87,9 @@ func (c *ARCCache) Get(key interface{}) (interface{}, bool) {
 
 // Add adds a value to the cache.
 func (c *ARCCache) Add(key, value interface{}) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
 	// Check if the value is contained in T1 (recent), and potentially
 	// promote it to frequent T2
 	if c.t1.Contains(key) {
@@ -196,11 +202,15 @@ func (c *ARCCache) replace(key interface{}) {
 
 // Len returns the number of cached entries
 func (c *ARCCache) Len() int {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
 	return c.t1.Len() + c.t2.Len()
 }
 
 // Keys returns all the cached keys
 func (c *ARCCache) Keys() []interface{} {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
 	k1 := c.t1.Keys()
 	k2 := c.t2.Keys()
 	return append(k1, k2...)
@@ -208,6 +218,8 @@ func (c *ARCCache) Keys() []interface{} {
 
 // Remove is used to perge a key from the cache
 func (c *ARCCache) Remove(key interface{}) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
 	c.t1.Remove(key)
 	c.t2.Remove(key)
 	c.b1.Remove(key)
@@ -216,6 +228,8 @@ func (c *ARCCache) Remove(key interface{}) {
 
 // Purge is used to clear the cache
 func (c *ARCCache) Purge() {
+	c.lock.Lock()
+	defer c.lock.Unlock()
 	c.t1.Purge()
 	c.t2.Purge()
 	c.b1.Purge()
@@ -225,12 +239,16 @@ func (c *ARCCache) Purge() {
 // Contains is used to check if the cache contains a key
 // without updating recency or frequency.
 func (c *ARCCache) Contains(key interface{}) bool {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
 	return c.t1.Contains(key) || c.t2.Contains(key)
 }
 
 // Peek is used to inspect the cache value of a key
 // without updating recency or frequency.
 func (c *ARCCache) Peek(key interface{}) (interface{}, bool) {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
 	if val, ok := c.t1.Peek(key); ok {
 		return val, ok
 	}
