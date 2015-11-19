@@ -35,17 +35,11 @@ func NewARC(size int) (*ARCCache, error) {
 	if err != nil {
 		return nil, err
 	}
-	t1, err := internal.NewLRU(size, func(k, v interface{}) {
-		// Evict from T1 adds to B1
-		b1.Add(k, nil)
-	})
+	t1, err := internal.NewLRU(size, nil)
 	if err != nil {
 		return nil, err
 	}
-	t2, err := internal.NewLRU(size, func(k, v interface{}) {
-		// Evict from T2 adds to B2
-		b2.Add(k, nil)
-	})
+	t2, err := internal.NewLRU(size, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -162,26 +156,17 @@ func (c *ARCCache) Add(key, value interface{}) {
 		return
 	}
 
-	// Check if any entries need to be evicted
-	t1Len := c.t1.Len()
-	b1Len := c.b1.Len()
-	if t1Len+b1Len == c.size {
-		if t1Len == c.size {
-			c.t1.RemoveOldest()
-		} else {
-			c.b1.RemoveOldest()
-			c.replace(false)
-		}
-	} else {
-		t2Len := c.t2.Len()
-		b2Len := c.b2.Len()
-		total := t1Len + t2Len + b1Len + b2Len
-		if total >= c.size {
-			if total == 2*c.size {
-				c.b2.RemoveOldest()
-			}
-			c.replace(false)
-		}
+	// Potentially need to make room in the cache
+	if c.t1.Len()+c.t2.Len() >= c.size {
+		c.replace(false)
+	}
+
+	// Keep the size of the ghost buffers trim
+	if c.b1.Len() > c.size-c.p {
+		c.b1.RemoveOldest()
+	}
+	if c.b2.Len() > c.p {
+		c.b2.RemoveOldest()
 	}
 
 	// Add to the recently seen list
@@ -194,9 +179,15 @@ func (c *ARCCache) Add(key, value interface{}) {
 func (c *ARCCache) replace(b2ContainsKey bool) {
 	t1Len := c.t1.Len()
 	if t1Len > 0 && (t1Len > c.p || (t1Len == c.p && b2ContainsKey)) {
-		c.t1.RemoveOldest()
+		k, _, ok := c.t1.RemoveOldest()
+		if ok {
+			c.b1.Add(k, nil)
+		}
 	} else {
-		c.t2.RemoveOldest()
+		k, _, ok := c.t2.RemoveOldest()
+		if ok {
+			c.b2.Add(k, nil)
+		}
 	}
 }
 

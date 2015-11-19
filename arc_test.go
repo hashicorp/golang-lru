@@ -1,6 +1,45 @@
 package lru
 
-import "testing"
+import (
+	"math/rand"
+	"testing"
+	"time"
+)
+
+func init() {
+	rand.Seed(time.Now().Unix())
+}
+
+func TestARC_RandomOps(t *testing.T) {
+	size := 128
+	l, err := NewARC(128)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	n := 200000
+	for i := 0; i < n; i++ {
+		key := rand.Int63() % 512
+		r := rand.Int63()
+		switch r % 3 {
+		case 0:
+			l.Add(key, key)
+		case 1:
+			l.Get(key)
+		case 2:
+			l.Remove(key)
+		}
+
+		if l.t1.Len()+l.t2.Len() > size {
+			t.Fatalf("bad: t1: %d t2: %d b1: %d b2: %d p: %d",
+				l.t1.Len(), l.t2.Len(), l.b1.Len(), l.b2.Len(), l.p)
+		}
+		if l.b1.Len()+l.b2.Len() > size {
+			t.Fatalf("bad: t1: %d t2: %d b1: %d b2: %d p: %d",
+				l.t1.Len(), l.t2.Len(), l.b1.Len(), l.b2.Len(), l.p)
+		}
+	}
+}
 
 func TestARC(t *testing.T) {
 	l, err := NewARC(128)
