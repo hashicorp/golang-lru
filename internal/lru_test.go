@@ -68,7 +68,7 @@ func TestLRU(t *testing.T) {
 	}
 }
 
-func TestLRU_GetOldest(t *testing.T) {
+func TestLRU_GetOldest_RemoveOldest(t *testing.T) {
 	l, err := NewLRU(128, nil)
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -81,6 +81,22 @@ func TestLRU_GetOldest(t *testing.T) {
 		t.Fatalf("missing")
 	}
 	if k.(int) != 128 {
+		t.Fatalf("bad: %v", k)
+	}
+
+	k, _, ok = l.RemoveOldest()
+	if !ok {
+		t.Fatalf("missing")
+	}
+	if k.(int) != 128 {
+		t.Fatalf("bad: %v", k)
+	}
+
+	k, _, ok = l.RemoveOldest()
+	if !ok {
+		t.Fatalf("missing")
+	}
+	if k.(int) != 129 {
 		t.Fatalf("bad: %v", k)
 	}
 }
