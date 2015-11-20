@@ -30,7 +30,7 @@ func NewLRU(size int, onEvict EvictCallback) (*LRU, error) {
 	c := &LRU{
 		size:      size,
 		evictList: list.New(),
-		items:     make(map[interface{}]*list.Element, size),
+		items:     make(map[interface{}]*list.Element),
 		onEvict:   onEvict,
 	}
 	return c, nil
@@ -38,14 +38,13 @@ func NewLRU(size int, onEvict EvictCallback) (*LRU, error) {
 
 // Purge is used to completely clear the cache
 func (c *LRU) Purge() {
-	if c.onEvict != nil {
-		for k, v := range c.items {
+	for k, v := range c.items {
+		if c.onEvict != nil {
 			c.onEvict(k, v.Value.(*entry).value)
 		}
+		delete(c.items, k)
 	}
-
-	c.evictList = list.New()
-	c.items = make(map[interface{}]*list.Element)
+	c.evictList.Init()
 }
 
 // Add adds a value to the cache.  Returns true if an eviction occured.
