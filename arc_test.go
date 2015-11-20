@@ -268,14 +268,6 @@ func TestARC(t *testing.T) {
 		}
 	}
 
-	l.Get(192) // expect 192 to be last key in l.Keys()
-
-	for i, k := range l.Keys() {
-		if (i < 63 && k != i+193) || (i == 63 && k != 192) {
-			t.Fatalf("out of order key: %v", k)
-		}
-	}
-
 	l.Purge()
 	if l.Len() != 0 {
 		t.Fatalf("bad len: %v", l.Len())
