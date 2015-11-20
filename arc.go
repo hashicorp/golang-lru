@@ -10,7 +10,9 @@ import (
 // ARC is an enhancement over the standard LRU cache in that tracks both
 // frequency and recency of use. This avoids a burst in access to new
 // entries from evicting the frequently used older entries. It adds some
-// additional tracking overhead to a standard LRU cache.
+// additional tracking overhead to a standard LRU cache, computationally
+// it is roughly 2x the cost, and the extra memory overhead is linear
+// with the size of the cache.
 type ARCCache struct {
 	size int // Size is the total capacity of the cache
 	p    int // P is the dynamic preference towards T1 or T2
