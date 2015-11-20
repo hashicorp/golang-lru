@@ -41,6 +41,195 @@ func TestARC_RandomOps(t *testing.T) {
 	}
 }
 
+func TestARC_Get_RecentToFrequent(t *testing.T) {
+	l, err := NewARC(128)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	// Touch all the entries, should be in t1
+	for i := 0; i < 128; i++ {
+		l.Add(i, i)
+	}
+	if n := l.t1.Len(); n != 128 {
+		t.Fatalf("bad: %d", n)
+	}
+	if n := l.t2.Len(); n != 0 {
+		t.Fatalf("bad: %d", n)
+	}
+
+	// Get should upgrade to t2
+	for i := 0; i < 128; i++ {
+		_, ok := l.Get(i)
+		if !ok {
+			t.Fatalf("missing: %d", i)
+		}
+	}
+	if n := l.t1.Len(); n != 0 {
+		t.Fatalf("bad: %d", n)
+	}
+	if n := l.t2.Len(); n != 128 {
+		t.Fatalf("bad: %d", n)
+	}
+
+	// Get be from t2
+	for i := 0; i < 128; i++ {
+		_, ok := l.Get(i)
+		if !ok {
+			t.Fatalf("missing: %d", i)
+		}
+	}
+	if n := l.t1.Len(); n != 0 {
+		t.Fatalf("bad: %d", n)
+	}
+	if n := l.t2.Len(); n != 128 {
+		t.Fatalf("bad: %d", n)
+	}
+}
+
+func TestARC_Add_RecentToFrequent(t *testing.T) {
+	l, err := NewARC(128)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	// Add initially to t1
+	l.Add(1, 1)
+	if n := l.t1.Len(); n != 1 {
+		t.Fatalf("bad: %d", n)
+	}
+	if n := l.t2.Len(); n != 0 {
+		t.Fatalf("bad: %d", n)
+	}
+
+	// Add should upgrade to t2
+	l.Add(1, 1)
+	if n := l.t1.Len(); n != 0 {
+		t.Fatalf("bad: %d", n)
+	}
+	if n := l.t2.Len(); n != 1 {
+		t.Fatalf("bad: %d", n)
+	}
+
+	// Add should remain in t2
+	l.Add(1, 1)
+	if n := l.t1.Len(); n != 0 {
+		t.Fatalf("bad: %d", n)
+	}
+	if n := l.t2.Len(); n != 1 {
+		t.Fatalf("bad: %d", n)
+	}
+}
+
+func TestARC_Adaptive(t *testing.T) {
+	l, err := NewARC(4)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	// Fill t1
+	for i := 0; i < 4; i++ {
+		l.Add(i, i)
+	}
+	if n := l.t1.Len(); n != 4 {
+		t.Fatalf("bad: %d", n)
+	}
+
+	// Move to t2
+	l.Get(0)
+	l.Get(1)
+	if n := l.t2.Len(); n != 2 {
+		t.Fatalf("bad: %d", n)
+	}
+
+	// Evict from t1
+	l.Add(4, 4)
+	if n := l.b1.Len(); n != 1 {
+		t.Fatalf("bad: %d", n)
+	}
+
+	// Current state
+	// t1 : (MRU) [4, 3] (LRU)
+	// t2 : (MRU) [1, 0] (LRU)
+	// b1 : (MRU) [2] (LRU)
+	// b2 : (MRU) [] (LRU)
+
+	// Add 2, should cause hit on b1
+	l.Add(2, 2)
+	if n := l.b1.Len(); n != 1 {
+		t.Fatalf("bad: %d", n)
+	}
+	if l.p != 1 {
+		t.Fatalf("bad: %d", l.p)
+	}
+	if n := l.t2.Len(); n != 3 {
+		t.Fatalf("bad: %d", n)
+	}
+
+	// Current state
+	// t1 : (MRU) [4] (LRU)
+	// t2 : (MRU) [2, 1, 0] (LRU)
+	// b1 : (MRU) [3] (LRU)
+	// b2 : (MRU) [] (LRU)
+
+	// Add 4, should migrate to t2
+	l.Add(4, 4)
+	if n := l.t1.Len(); n != 0 {
+		t.Fatalf("bad: %d", n)
+	}
+	if n := l.t2.Len(); n != 4 {
+		t.Fatalf("bad: %d", n)
+	}
+
+	// Current state
+	// t1 : (MRU) [] (LRU)
+	// t2 : (MRU) [4, 2, 1, 0] (LRU)
+	// b1 : (MRU) [3] (LRU)
+	// b2 : (MRU) [] (LRU)
+
+	// Add 4, should evict to b2
+	l.Add(5, 5)
+	if n := l.t1.Len(); n != 1 {
+		t.Fatalf("bad: %d", n)
+	}
+	if n := l.t2.Len(); n != 3 {
+		t.Fatalf("bad: %d", n)
+	}
+	if n := l.b2.Len(); n != 1 {
+		t.Fatalf("bad: %d", n)
+	}
+
+	// Current state
+	// t1 : (MRU) [5] (LRU)
+	// t2 : (MRU) [4, 2, 1] (LRU)
+	// b1 : (MRU) [3] (LRU)
+	// b2 : (MRU) [0] (LRU)
+
+	// Add 0, should decrease p
+	l.Add(0, 0)
+	if n := l.t1.Len(); n != 0 {
+		t.Fatalf("bad: %d", n)
+	}
+	if n := l.t2.Len(); n != 4 {
+		t.Fatalf("bad: %d", n)
+	}
+	if n := l.b1.Len(); n != 2 {
+		t.Fatalf("bad: %d", n)
+	}
+	if n := l.b2.Len(); n != 0 {
+		t.Fatalf("bad: %d", n)
+	}
+	if l.p != 0 {
+		t.Fatalf("bad: %d", l.p)
+	}
+
+	// Current state
+	// t1 : (MRU) [] (LRU)
+	// t2 : (MRU) [0, 4, 2, 1] (LRU)
+	// b1 : (MRU) [5, 3] (LRU)
+	// b2 : (MRU) [0] (LRU)
+}
+
 func TestARC(t *testing.T) {
 	l, err := NewARC(128)
 	if err != nil {
