@@ -44,8 +44,15 @@ func TestLRU(t *testing.T) {
 		}
 	}
 	for i := 128; i < 192; i++ {
-		l.Remove(i)
-		_, ok := l.Get(i)
+		ok := l.Remove(i)
+		if !ok {
+			t.Fatalf("should be contained")
+		}
+		ok = l.Remove(i)
+		if ok {
+			t.Fatalf("should not be contained")
+		}
+		_, ok = l.Get(i)
 		if ok {
 			t.Fatalf("should be deleted")
 		}

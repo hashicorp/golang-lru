@@ -94,11 +94,14 @@ func (c *LRU) Peek(key interface{}) (value interface{}, ok bool) {
 	return nil, ok
 }
 
-// Remove removes the provided key from the cache.
-func (c *LRU) Remove(key interface{}) {
+// Remove removes the provided key from the cache, returning if the
+// key was contained.
+func (c *LRU) Remove(key interface{}) bool {
 	if ent, ok := c.items[key]; ok {
 		c.removeElement(ent)
+		return true
 	}
+	return false
 }
 
 // RemoveOldest removes the oldest item from the cache.
