@@ -212,10 +212,18 @@ func (c *ARCCache) Keys() []interface{} {
 func (c *ARCCache) Remove(key interface{}) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	c.t1.Remove(key)
-	c.t2.Remove(key)
-	c.b1.Remove(key)
-	c.b2.Remove(key)
+	if c.t1.Remove(key) {
+		return
+	}
+	if c.t2.Remove(key) {
+		return
+	}
+	if c.b1.Remove(key) {
+		return
+	}
+	if c.b2.Remove(key) {
+		return
+	}
 }
 
 // Purge is used to clear the cache
