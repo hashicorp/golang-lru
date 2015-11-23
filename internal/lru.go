@@ -125,11 +125,9 @@ func (c *LRU) GetOldest() (interface{}, interface{}, bool) {
 // Keys returns a slice of the keys in the cache, from oldest to newest.
 func (c *LRU) Keys() []interface{} {
 	keys := make([]interface{}, len(c.items))
-	ent := c.evictList.Back()
 	i := 0
-	for ent != nil {
+	for ent := c.evictList.Back(); ent != nil; ent = ent.Prev() {
 		keys[i] = ent.Value.(*entry).key
-		ent = ent.Prev()
 		i++
 	}
 	return keys

@@ -63,8 +63,8 @@ func (c *ARCCache) Get(key interface{}) (interface{}, bool) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	// Check if the value is contained in T1 (recent), and potentially
-	// promote it to frequent T2
+	// Ff the value is contained in T1 (recent), then
+	// promote it to T2 (frequent)
 	if val, ok := c.t1.Peek(key); ok {
 		c.t1.Remove(key)
 		c.t2.Add(key, val)
@@ -72,8 +72,7 @@ func (c *ARCCache) Get(key interface{}) (interface{}, bool) {
 	}
 
 	// Check if the value is contained in T2 (frequent)
-	val, ok := c.t2.Get(key)
-	if ok {
+	if val, ok := c.t2.Get(key); ok {
 		return val, ok
 	}
 
@@ -100,7 +99,7 @@ func (c *ARCCache) Add(key, value interface{}) {
 		return
 	}
 
-	// Check if this value was recently evitcted as part of the
+	// Check if this value was recently evicted as part of the
 	// recently used list
 	if c.b1.Contains(key) {
 		// T1 set is too small, increase P appropriately
@@ -209,7 +208,7 @@ func (c *ARCCache) Keys() []interface{} {
 	return append(k1, k2...)
 }
 
-// Remove is used to perge a key from the cache
+// Remove is used to purge a key from the cache
 func (c *ARCCache) Remove(key interface{}) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
