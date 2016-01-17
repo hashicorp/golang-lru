@@ -20,7 +20,7 @@ const (
 // TwoQueueCache is a thread-safe fixed size 2Q cache.
 // 2Q is an enhancement over the standard LRU cache
 // in that it tracks both frequently and recently used
-// entries seperately. This avoids a burst in access to new
+// entries separately. This avoids a burst in access to new
 // entries from evicting frequently used entries. It adds some
 // additional tracking overhead to the standard LRU cache, and is
 // computationally about 2x the cost, and adds some metadata over
@@ -84,7 +84,8 @@ func New2QParams(size int, recentRatio float64, ghostRatio float64) (*TwoQueueCa
 	return c, nil
 }
 
-func (c *TwoQueueCache) Get(key interface{}) (interface{}, bool) {
+// Get looks up a key's value from the cache.
+func (c *TwoQueueCache) Get(key interface{}) (value interface{}, ok bool) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -105,6 +106,7 @@ func (c *TwoQueueCache) Get(key interface{}) (interface{}, bool) {
 	return nil, false
 }
 
+// Add adds a value to the cache.
 func (c *TwoQueueCache) Add(key, value interface{}) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -160,12 +162,15 @@ func (c *TwoQueueCache) ensureSpace(recentEvict bool) {
 	c.frequent.RemoveOldest()
 }
 
+// Len returns the number of items in the cache.
 func (c *TwoQueueCache) Len() int {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	return c.recent.Len() + c.frequent.Len()
 }
 
+// Keys returns a slice of the keys in the cache.
+// The frequently used keys are first in the returned slice.
 func (c *TwoQueueCache) Keys() []interface{} {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
@@ -174,6 +179,7 @@ func (c *TwoQueueCache) Keys() []interface{} {
 	return append(k1, k2...)
 }
 
+// Remove removes the provided key from the cache.
 func (c *TwoQueueCache) Remove(key interface{}) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -188,6 +194,7 @@ func (c *TwoQueueCache) Remove(key interface{}) {
 	}
 }
 
+// Purge is used to completely clear the cache.
 func (c *TwoQueueCache) Purge() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -196,13 +203,22 @@ func (c *TwoQueueCache) Purge() {
 	c.recentEvict.Purge()
 }
 
+// Clear is an alias for Purge.
+func (c *TwoQueueCache) Clear() {
+	c.Purge()
+}
+
+// Contains is used to check if the cache contains a key
+// without updating recency or frequency.
 func (c *TwoQueueCache) Contains(key interface{}) bool {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	return c.frequent.Contains(key) || c.recent.Contains(key)
 }
 
-func (c *TwoQueueCache) Peek(key interface{}) (interface{}, bool) {
+// Peek is used to inspect the cache value of a key
+// without updating recency or frequency.
+func (c *TwoQueueCache) Peek(key interface{}) (value interface{}, ok bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	if val, ok := c.frequent.Peek(key); ok {

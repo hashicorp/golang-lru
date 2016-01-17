@@ -1,6 +1,3 @@
-// This package provides a simple LRU cache. It is based on the
-// LRU implementation in groupcache:
-// https://github.com/golang/groupcache/tree/master/lru
 package lru
 
 import (
@@ -15,7 +12,7 @@ type Cache struct {
 	lock sync.RWMutex
 }
 
-// New creates an LRU of the given size
+// New creates an LRU of the given size.
 func New(size int) (*Cache, error) {
 	return NewWithEvict(size, nil)
 }
@@ -33,28 +30,33 @@ func NewWithEvict(size int, onEvicted func(key interface{}, value interface{})) 
 	return c, nil
 }
 
-// Purge is used to completely clear the cache
+// Purge is used to completely clear the cache.
 func (c *Cache) Purge() {
 	c.lock.Lock()
 	c.lru.Purge()
 	c.lock.Unlock()
 }
 
-// Add adds a value to the cache.  Returns true if an eviction occured.
-func (c *Cache) Add(key, value interface{}) bool {
+// Clear is an alias for Purge.
+func (c *Cache) Clear() {
+	c.Purge()
+}
+
+// Add adds a value to the cache.  Returns true if an eviction occurred.
+func (c *Cache) Add(key, value interface{}) (evicted bool) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	return c.lru.Add(key, value)
 }
 
 // Get looks up a key's value from the cache.
-func (c *Cache) Get(key interface{}) (interface{}, bool) {
+func (c *Cache) Get(key interface{}) (value interface{}, ok bool) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	return c.lru.Get(key)
 }
 
-// Check if a key is in the cache, without updating the recent-ness
+// Contains checks if a key is in the cache, without updating the recent-ness
 // or deleting it for being stale.
 func (c *Cache) Contains(key interface{}) bool {
 	c.lock.RLock()
@@ -62,9 +64,9 @@ func (c *Cache) Contains(key interface{}) bool {
 	return c.lru.Contains(key)
 }
 
-// Returns the key value (or undefined if not found) without updating
+// Peek returns the key value (or undefined if not found) without updating
 // the "recently used"-ness of the key.
-func (c *Cache) Peek(key interface{}) (interface{}, bool) {
+func (c *Cache) Peek(key interface{}) (value interface{}, ok bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	return c.lru.Peek(key)
@@ -73,7 +75,7 @@ func (c *Cache) Peek(key interface{}) (interface{}, bool) {
 // ContainsOrAdd checks if a key is in the cache  without updating the
 // recent-ness or deleting it for being stale,  and if not, adds the value.
 // Returns whether found and whether an eviction occurred.
-func (c *Cache) ContainsOrAdd(key, value interface{}) (ok, evict bool) {
+func (c *Cache) ContainsOrAdd(key, value interface{}) (ok, evicted bool) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 

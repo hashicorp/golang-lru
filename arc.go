@@ -60,11 +60,11 @@ func NewARC(size int) (*ARCCache, error) {
 }
 
 // Get looks up a key's value from the cache.
-func (c *ARCCache) Get(key interface{}) (interface{}, bool) {
+func (c *ARCCache) Get(key interface{}) (value interface{}, ok bool) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	// Ff the value is contained in T1 (recent), then
+	// If the value is contained in T1 (recent), then
 	// promote it to T2 (frequent)
 	if val, ok := c.t1.Peek(key); ok {
 		c.t1.Remove(key)
@@ -153,7 +153,7 @@ func (c *ARCCache) Add(key, value interface{}) {
 		// Remove from B2
 		c.b2.Remove(key)
 
-		// Add the key to the frequntly used list
+		// Add the key to the frequently used list
 		c.t2.Add(key, value)
 		return
 	}
@@ -237,6 +237,11 @@ func (c *ARCCache) Purge() {
 	c.b2.Purge()
 }
 
+// Clear is an alias for Purge.
+func (c *ARCCache) Clear() {
+	c.Purge()
+}
+
 // Contains is used to check if the cache contains a key
 // without updating recency or frequency.
 func (c *ARCCache) Contains(key interface{}) bool {
@@ -247,7 +252,7 @@ func (c *ARCCache) Contains(key interface{}) bool {
 
 // Peek is used to inspect the cache value of a key
 // without updating recency or frequency.
-func (c *ARCCache) Peek(key interface{}) (interface{}, bool) {
+func (c *ARCCache) Peek(key interface{}) (value interface{}, ok bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	if val, ok := c.t1.Peek(key); ok {
