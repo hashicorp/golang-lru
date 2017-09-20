@@ -20,6 +20,17 @@ func New(size int) (*Cache, error) {
 	return NewWithEvict(size, nil)
 }
 
+// Must is a helper that wraps a call to a function returning (*Cache, error)
+// and panics if the error is non-nil. It is intended for use in variable initializations
+// such as
+//	var c = lru.Must(lru.New(128))
+func Must(c *Cache, err error) *Cache {
+	if err != nil {
+		panic(err)
+	}
+	return c
+}
+
 // NewWithEvict constructs a fixed size cache with the given eviction
 // callback.
 func NewWithEvict(size int, onEvicted func(key interface{}, value interface{})) (*Cache, error) {
