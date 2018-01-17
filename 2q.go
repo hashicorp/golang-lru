@@ -30,9 +30,9 @@ type TwoQueueCache struct {
 	size       int
 	recentSize int
 
-	recent      *simplelru.LRU
-	frequent    *simplelru.LRU
-	recentEvict *simplelru.LRU
+	recent      simplelru.LRUCache
+	frequent    simplelru.LRUCache
+	recentEvict simplelru.LRUCache
 	lock        sync.RWMutex
 }
 

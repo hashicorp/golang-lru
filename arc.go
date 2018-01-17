@@ -18,11 +18,11 @@ type ARCCache struct {
 	size int // Size is the total capacity of the cache
 	p    int // P is the dynamic preference towards T1 or T2
 
-	t1 *simplelru.LRU // T1 is the LRU for recently accessed items
-	b1 *simplelru.LRU // B1 is the LRU for evictions from t1
+	t1 simplelru.LRUCache // T1 is the LRU for recently accessed items
+	b1 simplelru.LRUCache // B1 is the LRU for evictions from t1
 
-	t2 *simplelru.LRU // T2 is the LRU for frequently accessed items
-	b2 *simplelru.LRU // B2 is the LRU for evictions from t2
+	t2 simplelru.LRUCache // T2 is the LRU for frequently accessed items
+	b2 simplelru.LRUCache // B2 is the LRU for evictions from t2
 
 	lock sync.RWMutex
 }
