@@ -80,7 +80,7 @@ func (c *Cache) ContainsOrAdd(key, value interface{}) (ok, evict bool) {
 	if c.lru.Contains(key) {
 		return true, false
 	}
-	evict = c.lru.Add(key, value)
+	evict := c.lru.Add(key, value)
 	return false, evict
 }
 
