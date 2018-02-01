@@ -1,4 +1,4 @@
-// This package provides a simple LRU cache. It is based on the
+// Package lru provides a simple LRU cache. It is based on the
 // LRU implementation in groupcache:
 // https://github.com/golang/groupcache/tree/master/lru
 package lru
@@ -54,15 +54,15 @@ func (c *Cache) Get(key interface{}) (interface{}, bool) {
 	return c.lru.Get(key)
 }
 
-// Check if a key is in the cache, without updating the recent-ness
-// or deleting it for being stale.
+// Contains checks if a key is in the cache, without updating the
+// recent-ness or deleting it for being stale.
 func (c *Cache) Contains(key interface{}) bool {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	return c.lru.Contains(key)
 }
 
-// Returns the key value (or undefined if not found) without updating
+// Peek returns the key value (or undefined if not found) without updating
 // the "recently used"-ness of the key.
 func (c *Cache) Peek(key interface{}) (interface{}, bool) {
 	c.lock.RLock()
@@ -80,7 +80,6 @@ func (c *Cache) ContainsOrAdd(key, value interface{}) (ok, evict bool) {
 	if c.lru.Contains(key) {
 		return true, false
 	}
-
 	evict := c.lru.Add(key, value)
 	return false, evict
 }
