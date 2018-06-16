@@ -88,6 +88,14 @@ func (c *Cache) Remove(key interface{}) {
 	c.lock.Unlock()
 }
 
+// Resize changes the cache size.
+func (c *Cache) Resize(size int) (evicted int) {
+	c.lock.Lock()
+	evicted = c.lru.Resize(size)
+	c.lock.Unlock()
+	return evicted
+}
+
 // RemoveOldest removes the oldest item from the cache.
 func (c *Cache) RemoveOldest() {
 	c.lock.Lock()
