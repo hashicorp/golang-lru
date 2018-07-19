@@ -108,3 +108,16 @@ func (c *Cache) Len() int {
 	defer c.lock.RUnlock()
 	return c.lru.Len()
 }
+
+// Mutate executes a callback function on the previous value of the key.
+// The mutator returns the new value for that key and an error.
+// If an error is returned from the mutator, the value returned from the mutator is thrown out and the key retains its original value.
+func (c *Cache) Mutate(key interface{}, mutator func(old interface{}, exists bool) (interface{}, error)) (bool, error) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	n, err := mutator(c.lru.Get(key))
+	if err != nil {
+		return false, err
+	}
+	return c.lru.Add(key, n), nil
+}

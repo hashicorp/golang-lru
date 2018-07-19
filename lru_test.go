@@ -3,6 +3,7 @@ package lru
 import (
 	"math/rand"
 	"testing"
+	"errors"
 )
 
 func BenchmarkLRU_Rand(b *testing.B) {
@@ -217,5 +218,68 @@ func TestLRUPeek(t *testing.T) {
 	l.Add(3, 3)
 	if l.Contains(1) {
 		t.Errorf("should not have updated recent-ness of 1")
+	}
+}
+
+func TestLRUMutate(t *testing.T) {
+	mErr := errors.New("user defined mutation error")
+
+	cases := []struct{
+		description string
+		expectedFinalValue interface{}
+		expectedError error
+		mutation func(old interface{}, exists bool) (interface{}, error)
+		factor int
+	}{
+		{
+			description: "sets an unset key to the return value of mutation",
+			expectedFinalValue: 1,
+			mutation: func(old interface{}, exists bool) (interface{}, error) {
+				return 1, nil
+			},
+			factor:         1,
+		},
+		{
+			description: "increments an existing value",
+			expectedFinalValue: 5,
+			mutation: func(old interface{}, exists bool) (interface{}, error) {
+				if !exists {
+					return 1, nil
+				}
+				i := old.(int)
+				return i+1, nil
+			},
+			factor:         5,
+		},
+		{
+			description: "propagates errors from the mutator",
+			expectedError: mErr,
+			mutation: func(old interface{}, exists bool) (interface{}, error) {
+				return nil, mErr
+			},
+			factor:         1,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.description, func(t *testing.T) {
+			l, err := New(2)
+			if err != nil {
+				t.Fatalf("err: %v", err)
+			}
+
+			for i := 0; i < c.factor; i ++ {
+				_, err = l.Mutate("key", c.mutation)
+			}
+
+			if err != c.expectedError {
+				t.Errorf("err should be set to %v but was %v", c.expectedError, err)
+			}
+
+			actualFinalValue, _ := l.Get("key")
+			if actualFinalValue != c.expectedFinalValue {
+				t.Errorf("final value should be set to %v but was %v", c.expectedFinalValue, actualFinalValue)
+			}
+		})
 	}
 }
