@@ -116,6 +116,19 @@ func (c *LRU) RemoveOldest() (key interface{}, value interface{}, ok bool) {
 	return nil, nil, false
 }
 
+// RemoveWithoutEvict removes the provided key from the cache without
+// evicting and returns if the key was contained.
+func (c *LRU) RemoveWithoutEvict(key interface{}) (present bool) {
+	if ent, ok := c.items[key]; ok {
+		c.evictList.Remove(ent)
+		kv := ent.Value.(*entry)
+		delete(c.items, kv.key)
+
+		return true
+	}
+	return false
+}
+
 // GetOldest returns the oldest entry
 func (c *LRU) GetOldest() (key interface{}, value interface{}, ok bool) {
 	ent := c.evictList.Back()
