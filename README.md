@@ -1,3 +1,4 @@
+[![GoDoc](https://godoc.org/github.com/yudai/gojsondiff?status.svg)](http://godoc.org/github.com/hashicorp/golang-lru)
 [![Build Status](https://travis-ci.org/hashicorp/golang-lru.svg?branch=master)](https://travis-ci.org/hashicorp/golang-lru)
 [![Coverage Status](https://coveralls.io/repos/github/hashicorp/golang-lru/badge.svg?branch=master)](https://coveralls.io/github/hashicorp/golang-lru?branch=master)
 
