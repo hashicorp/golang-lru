@@ -101,6 +101,14 @@ func (c *Cache) RemoveOldest() (key interface{}, value interface{}, ok bool) {
 	return
 }
 
+// GetOldest returns the oldest entry
+func (c *Cache) GetOldest() (key interface{}, value interface{}, ok bool) {
+	c.lock.Lock()
+	key, value, ok = c.lru.GetOldest()
+	c.lock.Unlock()
+	return
+}
+
 // Keys returns a slice of the keys in the cache, from oldest to newest.
 func (c *Cache) Keys() []interface{} {
 	c.lock.RLock()
