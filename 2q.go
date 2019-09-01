@@ -70,7 +70,7 @@ func New2QParams(size int, recentRatio float64, ghostRatio float64) (*TwoQueueCa
 	}
 	recentEvict, err := simplelru.NewLRU(evictSize, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Failed to create Evict cache, please choose a higher 'ghostRatio' or increase cache 'size'")
 	}
 
 	// Initialize the cache
