@@ -2,8 +2,17 @@ package simplelru
 
 import (
 	"container/list"
-	"errors"
 )
+
+// InvalidSize error is returned when a size <= 0 is given while creating simplelru
+type InvalidSize struct {
+	errMsg string
+}
+
+// Error implements the error interface for type InvalidSize
+func (e *InvalidSize) Error() string {
+	return "Must provide a positive size"
+}
 
 // EvictCallback is used to get a callback when a cache entry is evicted
 type EvictCallback func(key interface{}, value interface{})
@@ -25,7 +34,7 @@ type entry struct {
 // NewLRU constructs an LRU of the given size
 func NewLRU(size int, onEvict EvictCallback) (*LRU, error) {
 	if size <= 0 {
-		return nil, errors.New("Must provide a positive size")
+		return nil, &InvalidSize{}
 	}
 	c := &LRU{
 		size:      size,
