@@ -138,7 +138,6 @@ func (c *TwoQueueCache) Add(key, value interface{}) {
 	// Add to the recently seen list
 	c.ensureSpace(false)
 	c.recent.Add(key, value)
-	return
 }
 
 // ensureSpace is used to ensure we have space in the cache
