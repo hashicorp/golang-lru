@@ -158,6 +158,9 @@ func (c *LRU) Resize(size int) (evicted int) {
 	return diff
 }
 
+// Close does nothing for this type of cache.
+func (c *LRU) Close() {}
+
 // removeOldest removes the oldest item from the cache.
 func (c *LRU) removeOldest() {
 	ent := c.evictList.Back()
