@@ -4,6 +4,8 @@
 
 package simplelru
 
+import "time"
+
 // entry is an LRU entry
 type entry[K comparable, V any] struct {
 	// Next and previous pointers in the doubly-linked list of elements.
@@ -21,6 +23,9 @@ type entry[K comparable, V any] struct {
 
 	// The value stored with this element.
 	value V
+
+	// The time this element would be cleaned up
+	expiresAt time.Time
 }
 
 // prevEntry returns the previous list element or nil.
@@ -79,9 +84,9 @@ func (l *lruList[K, V]) insert(e, at *entry[K, V]) *entry[K, V] {
 	return e
 }
 
-// insertValue is a convenience wrapper for insert(&Element{Value: v}, at).
-func (l *lruList[K, V]) insertValue(k K, v V, at *entry[K, V]) *entry[K, V] {
-	return l.insert(&entry[K, V]{value: v, key: k}, at)
+// insertValue is a convenience wrapper for insert(&entry{value: v, expiresAt: expiresAt}, at).
+func (l *lruList[K, V]) insertValue(k K, v V, expiresAt time.Time, at *entry[K, V]) *entry[K, V] {
+	return l.insert(&entry[K, V]{value: v, key: k, expiresAt: expiresAt}, at)
 }
 
 // remove removes e from its list, decrements l.len
@@ -111,9 +116,9 @@ func (l *lruList[K, V]) move(e, at *entry[K, V]) {
 }
 
 // pushFront inserts a new element e with value v at the front of list l and returns e.
-func (l *lruList[K, V]) pushFront(k K, v V) *entry[K, V] {
+func (l *lruList[K, V]) pushFront(k K, v V, expiresAt time.Time) *entry[K, V] {
 	l.lazyInit()
-	return l.insertValue(k, v, &l.root)
+	return l.insertValue(k, v, expiresAt, &l.root)
 }
 
 // moveToFront moves element e to the front of list l.

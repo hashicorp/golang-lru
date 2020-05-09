@@ -35,6 +35,9 @@ type LRUCache[K comparable, V any] interface {
 	// Clears all cache entries.
 	Purge()
 
+	// Closes all hanging goroutines.
+	Close()
+
 	// Resizes cache, returning number evicted
 	Resize(int) int
 }
