@@ -31,11 +31,14 @@ func NewWithEvict(size int, onEvicted func(key interface{}, value interface{})) 
 }
 
 
-// New creates an LRU of the given size.
+// NewWithMetric creates an LRU with metric of the given size.
 func NewWithMetric(size int) (*CacheWithMetric, error) {
 	return NewWithMetricAndEvict(size, nil)
 }
 
+
+// NewWithMetricAndEvict constructs a fixed size cache with metric and the given eviction
+// callback.
 func NewWithMetricAndEvict(size int, onEvicted func(key interface{}, value interface{})) (*CacheWithMetric, error) {
 	c, err := NewWithEvict(size, onEvicted)
 	if err != nil {
@@ -167,13 +170,14 @@ func (c *Cache) Len() int {
 	return length
 }
 
+// CacheWithMetric is a thread-safe fixed size LRU cache with metric.
 type CacheWithMetric struct {
 	*Cache
 	hitCount uint64
 	missCount uint64
 }
 
-// rewrite Get
+// Get looks up a key's value from the cache.
 func (c *CacheWithMetric) Get(key interface{}) (value interface{}, ok bool) {
 	c.lock.Lock()
 	value, ok = c.lru.Get(key)
@@ -188,18 +192,22 @@ func (c *CacheWithMetric) Get(key interface{}) (value interface{}, ok bool) {
 	return value, ok
 }
 
+// HitCount returns hit count
 func (c *CacheWithMetric) HitCount() uint64 {
 	return atomic.LoadUint64(&c.hitCount)
 }
 
+// MissCount returns miss count
 func (c *CacheWithMetric) MissCount() uint64 {
 	return atomic.LoadUint64(&c.missCount)
 }
 
+// LookupCount returns lookup count
 func (c *CacheWithMetric) LookupCount() uint64 {
 	return c.HitCount() + c.MissCount()
 }
 
+// HitRate returns hit count
 func (c *CacheWithMetric) HitRate() float64 {
 	hc, mc := c.HitCount(), c.MissCount()
 	total := hc + mc
