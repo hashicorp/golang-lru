@@ -2,6 +2,7 @@ package lru
 
 import (
 	"math/rand"
+	"sync"
 	"testing"
 )
 
@@ -290,4 +291,48 @@ func TestLRUResize(t *testing.T) {
 	if !l.Contains(3) || !l.Contains(4) {
 		t.Errorf("Cache should have contained 2 elements")
 	}
+}
+
+func TestCacheWithMetric_Statistic(t *testing.T) {
+	c, _ := NewWithMetric(1000)
+	addCount := uint64(841)
+	var wg sync.WaitGroup
+	for i := uint64(0); i < addCount; i++ {
+		wg.Add(1)
+		go func(i uint64) {
+			c.Add(i, i)
+			wg.Done()
+		}(i)
+	}
+
+	wg.Wait()
+
+	lookupCount := uint64(7571)
+	for i := uint64(0); i < lookupCount; i++ {
+		wg.Add(1)
+		go func(i uint64) {
+			c.Get(i)
+			wg.Done()
+		}(i)
+	}
+
+	wg.Wait()
+
+
+	if addCount != c.HitCount() {
+		t.Errorf("Hope hit count is %d, but return %d", addCount, c.HitCount())
+	}
+
+	if lookupCount != c.LookupCount() {
+		t.Errorf("Hope lookup count is %d, but return %d", lookupCount, c.LookupCount())
+	}
+
+	if (lookupCount - addCount) != c.MissCount() {
+		t.Errorf("Hope miss count is %d, but return %d", lookupCount-addCount, c.MissCount())
+	}
+
+	if (float64(addCount) / float64(lookupCount)) != c.HitRate() {
+		t.Errorf("Hope miss count is %f, but return %f", float64(addCount)/float64(lookupCount), c.HitRate())
+	}
+
 }

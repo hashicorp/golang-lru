@@ -1,9 +1,9 @@
 package lru
 
 import (
-	"sync"
-
 	"github.com/hashicorp/golang-lru/simplelru"
+	"sync"
+	"sync/atomic"
 )
 
 // Cache is a thread-safe fixed size LRU cache.
@@ -29,6 +29,24 @@ func NewWithEvict(size int, onEvicted func(key interface{}, value interface{})) 
 	}
 	return c, nil
 }
+
+
+// New creates an LRU of the given size.
+func NewWithMetric(size int) (*CacheWithMetric, error) {
+	return NewWithMetricAndEvict(size, nil)
+}
+
+func NewWithMetricAndEvict(size int, onEvicted func(key interface{}, value interface{})) (*CacheWithMetric, error) {
+	c, err := NewWithEvict(size, onEvicted)
+	if err != nil {
+		return nil, err
+	}
+
+	return &CacheWithMetric{
+		Cache: c,
+	}, nil
+}
+
 
 // Purge is used to completely clear the cache.
 func (c *Cache) Purge() {
@@ -147,4 +165,46 @@ func (c *Cache) Len() int {
 	length := c.lru.Len()
 	c.lock.RUnlock()
 	return length
+}
+
+type CacheWithMetric struct {
+	*Cache
+	hitCount uint64
+	missCount uint64
+}
+
+// rewrite Get
+func (c *CacheWithMetric) Get(key interface{}) (value interface{}, ok bool) {
+	c.lock.Lock()
+	value, ok = c.lru.Get(key)
+
+	if ok {
+		atomic.AddUint64(&c.hitCount, 1)
+	} else {
+		atomic.AddUint64(&c.missCount, 1)
+	}
+
+	c.lock.Unlock()
+	return value, ok
+}
+
+func (c *CacheWithMetric) HitCount() uint64 {
+	return atomic.LoadUint64(&c.hitCount)
+}
+
+func (c *CacheWithMetric) MissCount() uint64 {
+	return atomic.LoadUint64(&c.missCount)
+}
+
+func (c *CacheWithMetric) LookupCount() uint64 {
+	return c.HitCount() + c.MissCount()
+}
+
+func (c *CacheWithMetric) HitRate() float64 {
+	hc, mc := c.HitCount(), c.MissCount()
+	total := hc + mc
+	if total == 0 {
+		return 0.0
+	}
+	return float64(hc) / float64(total)
 }
