@@ -207,7 +207,7 @@ func (c *CacheWithMetric) LookupCount() uint64 {
 	return c.HitCount() + c.MissCount()
 }
 
-// HitRate returns hit count
+// HitRate returns hit rate
 func (c *CacheWithMetric) HitRate() float64 {
 	hc, mc := c.HitCount(), c.MissCount()
 	total := hc + mc
