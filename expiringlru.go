@@ -58,15 +58,15 @@ type ExpiringCache struct {
 	expireList *expireList
 	expireType expiringType
 	//placeholder for time.Now() for easier testing setup
-	time_Now func() time.Time
-	lock     RWLocker
+	timeNow func() time.Time
+	lock    RWLocker
 }
 
-// Option to customize ExpiringCache
+// OptionExp defines option to customize ExpiringCache
 type OptionExp func(c *ExpiringCache) error
 
-/* NewExpiring2Q creates an expiring cache with specifized size and entries lifetime duration, backed by a 2-queue LRU
- */
+// NewExpiring2Q creates an expiring cache with specifized
+// size and entries lifetime duration, backed by a 2-queue LRU
 func NewExpiring2Q(size int, expir time.Duration, opts ...OptionExp) (elru *ExpiringCache, err error) {
 	//create a non synced LRU as backing store
 	lru, err := New2Q(size, NoLock2Q)
@@ -77,8 +77,8 @@ func NewExpiring2Q(size int, expir time.Duration, opts ...OptionExp) (elru *Expi
 	return
 }
 
-/* NewExpiringARC creates an expiring cache with specifized size and entries lifetime duration, backed by a ARC LRU
- */
+// NewExpiringARC creates an expiring cache with specifized
+// size and entries lifetime duration, backed by a ARC LRU
 func NewExpiringARC(size int, expir time.Duration, opts ...OptionExp) (elru *ExpiringCache, err error) {
 	//create a non synced LRU as backing store
 	lru, err := NewARC(size, NoLockARC)
@@ -89,8 +89,8 @@ func NewExpiringARC(size int, expir time.Duration, opts ...OptionExp) (elru *Exp
 	return
 }
 
-/* NewExpiringLRU creates an expiring cache with specifized size and entries lifetime duration, backed by a simple LRU
- */
+// NewExpiringLRU creates an expiring cache with specifized
+// size and entries lifetime duration, backed by a simple LRU
 func NewExpiringLRU(size int, expir time.Duration, opts ...OptionExp) (elru *ExpiringCache, err error) {
 	//create a non synced LRU as backing store
 	lru, err := New(size, NoLock)
@@ -101,8 +101,8 @@ func NewExpiringLRU(size int, expir time.Duration, opts ...OptionExp) (elru *Exp
 	return
 }
 
-/* Expiring will wrap an existing LRU to make its entries expiring with specified duration
- */
+// Expiring will wrap an existing LRU to make its entries
+// expiring with specified duration
 func Expiring(expir time.Duration, lru lruCache, opts ...OptionExp) (*ExpiringCache, error) {
 	//create expiring cache with default settings
 	elru := &ExpiringCache{
@@ -110,7 +110,7 @@ func Expiring(expir time.Duration, lru lruCache, opts ...OptionExp) (*ExpiringCa
 		expiration: expir,
 		expireList: newExpireList(),
 		expireType: expireAfterWrite,
-		time_Now:   time.Now,
+		timeNow:    time.Now,
 		lock:       &sync.RWMutex{},
 	}
 	//apply options to customize
@@ -122,28 +122,28 @@ func Expiring(expir time.Duration, lru lruCache, opts ...OptionExp) (*ExpiringCa
 	return elru, nil
 }
 
-// Option NoLockExp disables locking for ExpiringCache
+// NoLockExp disables locking for ExpiringCache
 func NoLockExp(elru *ExpiringCache) error {
 	elru.lock = NoOpRWLocker{}
 	return nil
 }
 
-// Option ExpireAfterWrite sets expiring policy
+// ExpireAfterWrite sets expiring policy
 func ExpireAfterWrite(elru *ExpiringCache) error {
 	elru.expireType = expireAfterWrite
 	return nil
 }
 
-// Option ExpireAfterAccess sets expiring policy
+// ExpireAfterAccess sets expiring policy
 func ExpireAfterAccess(elru *ExpiringCache) error {
 	elru.expireType = expireAfterAccess
 	return nil
 }
 
-// Option TimeTicker sets the function used to return current time, for test setup
+// TimeTicker sets the function used to return current time, for test setup
 func TimeTicker(tn func() time.Time) OptionExp {
 	return func(elru *ExpiringCache) error {
-		elru.time_Now = tn
+		elru.timeNow = tn
 		return nil
 	}
 }
@@ -161,7 +161,7 @@ func (elru *ExpiringCache) Add(k, v interface{}, evictedKeyVal ...*interface{}) 
 func (elru *ExpiringCache) AddWithTTL(k, v interface{}, expiration time.Duration, evictedKeyVal ...*interface{}) (evicted bool) {
 	elru.lock.Lock()
 	defer elru.lock.Unlock()
-	now := elru.time_Now()
+	now := elru.timeNow()
 	var ent *entry
 	var expired []*entry
 	if ent0, _ := elru.lru.Peek(k); ent0 != nil {
@@ -207,7 +207,7 @@ func (elru *ExpiringCache) AddWithTTL(k, v interface{}, expiration time.Duration
 func (elru *ExpiringCache) Get(k interface{}) (v interface{}, ok bool) {
 	elru.lock.Lock()
 	defer elru.lock.Unlock()
-	now := elru.time_Now()
+	now := elru.timeNow()
 	if ent0, ok := elru.lru.Get(k); ok {
 		ent := ent0.(*entry)
 		if ent.expirationTime.After(now) {
@@ -239,7 +239,7 @@ func (elru *ExpiringCache) Peek(k interface{}) (v interface{}, ok bool) {
 	defer elru.lock.RUnlock()
 	if ent0, ok := elru.lru.Peek(k); ok {
 		ent := ent0.(*entry)
-		if ent.expirationTime.After(elru.time_Now()) {
+		if ent.expirationTime.After(elru.timeNow()) {
 			return ent.val, true
 		}
 		return ent.val, false
@@ -260,7 +260,7 @@ func (elru *ExpiringCache) Keys() []interface{} {
 	elru.lock.Lock()
 	defer elru.lock.Unlock()
 	//to get accurate key set, remove all expired
-	elru.removeExpired(elru.time_Now(), true)
+	elru.removeExpired(elru.timeNow(), true)
 	return elru.lru.Keys()
 }
 
@@ -269,7 +269,7 @@ func (elru *ExpiringCache) Len() int {
 	elru.lock.Lock()
 	defer elru.lock.Unlock()
 	//to get accurate size, remove all expired
-	elru.removeExpired(elru.time_Now(), true)
+	elru.removeExpired(elru.timeNow(), true)
 	return elru.lru.Len()
 }
 
@@ -292,7 +292,7 @@ func (elru *ExpiringCache) removeExpired(now time.Time, removeAllExpired bool) (
 
 // RemoveAllExpired remove all expired entries, can be called by cleanup goroutine
 func (elru *ExpiringCache) RemoveAllExpired() {
-	elru.removeExpired(elru.time_Now(), true)
+	elru.removeExpired(elru.timeNow(), true)
 }
 
 // oldest entries are at front of expire list

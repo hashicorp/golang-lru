@@ -1,6 +1,6 @@
 package lru
 
-// Common interface of sync.RWMutex
+// RWLocker define base interface of sync.RWMutex
 type RWLocker interface {
 	Lock()
 	Unlock()
@@ -11,7 +11,14 @@ type RWLocker interface {
 // NoOpRWLocker is a dummy noop implementation of RWLocker interface
 type NoOpRWLocker struct{}
 
-func (nop NoOpRWLocker) Lock()    {}
-func (nop NoOpRWLocker) Unlock()  {}
-func (nop NoOpRWLocker) RLock()   {}
+// Lock perform noop Lock() operation
+func (nop NoOpRWLocker) Lock() {}
+
+// Unlock perform noop Unlock() operation
+func (nop NoOpRWLocker) Unlock() {}
+
+// RLock perform noop RLock() operation
+func (nop NoOpRWLocker) RLock() {}
+
+// RUnlock perform noop RUnlock() operation
 func (nop NoOpRWLocker) RUnlock() {}

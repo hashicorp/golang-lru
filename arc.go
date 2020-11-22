@@ -27,7 +27,7 @@ type ARCCache struct {
 	lock RWLocker
 }
 
-// Option to customize ARCCache
+// OptionARC defines option to customize ARCCache
 type OptionARC func(*ARCCache) error
 
 // NewARC creates an ARC of the given size
@@ -69,7 +69,7 @@ func NewARC(size int, opts ...OptionARC) (*ARCCache, error) {
 	return c, nil
 }
 
-// Option NoLockARC disables locking for ARCCache
+// NoLockARC disables locking for ARCCache
 func NoLockARC(c *ARCCache) error {
 	c.lock = NoOpRWLocker{}
 	return nil

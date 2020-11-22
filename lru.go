@@ -41,7 +41,7 @@ func NewWithEvict(size int, onEvicted func(key interface{}, value interface{}), 
 	return c, nil
 }
 
-// Option NoLock disables locking for LRUCache
+// NoLock disables locking for LRUCache
 func NoLock(c *Cache) error {
 	c.lock = NoOpRWLocker{}
 	return nil

@@ -36,7 +36,7 @@ type TwoQueueCache struct {
 	lock        RWLocker
 }
 
-// Option to customize TwoQueueCache
+// Option2Q define option to customize TwoQueueCache
 type Option2Q func(c *TwoQueueCache) error
 
 // New2Q creates a new TwoQueueCache using the default
@@ -94,7 +94,7 @@ func New2QParams(size int, recentRatio, ghostRatio float64, opts ...Option2Q) (*
 	return c, nil
 }
 
-// Option NoLock2Q disables locking for TwoQueueCache
+// NoLock2Q disables locking for TwoQueueCache
 func NoLock2Q(c *TwoQueueCache) error {
 	c.lock = NoOpRWLocker{}
 	return nil
