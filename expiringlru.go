@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/hashicorp/golang-lru/simplelru"
 )
 
 // common interface shared by 2q, arc and simple LRU, used as interface of backing LRU
@@ -93,7 +95,7 @@ func NewExpiringARC(size int, expir time.Duration, opts ...OptionExp) (elru *Exp
 // size and entries lifetime duration, backed by a simple LRU
 func NewExpiringLRU(size int, expir time.Duration, opts ...OptionExp) (elru *ExpiringCache, err error) {
 	// create a non synced LRU as backing store
-	lru, err := New(size, NoLock)
+	lru, err := simplelru.NewLRU(size, nil)
 	if err != nil {
 		return
 	}
