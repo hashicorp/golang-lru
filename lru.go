@@ -8,7 +8,7 @@ import (
 
 // Cache is a thread-safe fixed size LRU cache.
 type Cache struct {
-	lru  simplelru.LRUCache
+	lru  *simplelru.LRU
 	lock sync.RWMutex
 }
 
