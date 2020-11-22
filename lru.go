@@ -23,7 +23,7 @@ func New(size int, opts ...Option) (*Cache, error) {
 // NewWithEvict constructs a fixed size cache with the given eviction
 // callback.
 func NewWithEvict(size int, onEvicted func(key interface{}, value interface{}), opts ...Option) (*Cache, error) {
-	//create a cache with default settings
+	// create a cache with default settings
 	lru, err := simplelru.NewLRU(size, simplelru.EvictCallback(onEvicted))
 	if err != nil {
 		return nil, err
@@ -32,7 +32,7 @@ func NewWithEvict(size int, onEvicted func(key interface{}, value interface{}), 
 		lru:  lru,
 		lock: &sync.RWMutex{},
 	}
-	//apply options for custimization
+	// apply options for custimization
 	for _, opt := range opts {
 		if err = opt(c); err != nil {
 			return nil, err

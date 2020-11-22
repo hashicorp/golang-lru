@@ -281,12 +281,12 @@ func TestExpiring2Q_EvictionByLRU(t *testing.T) {
 		elru.Add(i, i)
 	}
 	elru.Add(2, 2)
-	//Get(0),Get(1) will move 0, 1 to freq-used list
-	//2 will remain in recent-used list
+	// Get(0),Get(1) will move 0, 1 to freq-used list
+	// 2 will remain in recent-used list
 	for i := 0; i < 2; i++ {
 		elru.Get(i)
 	}
-	//next add 3,4; verify 2, 3 will be evicted
+	// next add 3,4; verify 2, 3 will be evicted
 	var ek, ev interface{}
 	for i := 3; i < 5; i++ {
 		evicted := elru.Add(i, i, &ek, &ev)
@@ -299,10 +299,10 @@ func TestExpiring2Q_EvictionByLRU(t *testing.T) {
 		t.Fatalf("Expiring LRU eviction failed, expected 3 entries left, but found %v", elru.Len())
 	}
 	keys := elru.Keys()
-	//since 0, 1 are touched twice (write & read) so
-	//they are in frequently used list, they are kept
-	//and 2,3,4 only touched once (write), so they
-	//moved thru "recent" list, with 2,3 evicted
+	// since 0, 1 are touched twice (write & read) so
+	// they are in frequently used list, they are kept
+	// and 2,3,4 only touched once (write), so they
+	// moved thru "recent" list, with 2,3 evicted
 	for i, v := range []int{0, 1, 4} {
 		if v != keys[i] {
 			t.Fatalf("Expiring LRU eviction failed, expected keys {0,1,4} left, but found %v", elru.Keys())
@@ -310,7 +310,7 @@ func TestExpiring2Q_EvictionByLRU(t *testing.T) {
 	}
 }
 
-//testTimer used to simulate time-elapse for expiration tests
+// testTimer used to simulate time-elapse for expiration tests
 type testTimer struct {
 	t time.Time
 }
@@ -321,7 +321,7 @@ func (tt *testTimer) Advance(d time.Duration) { tt.t = tt.t.Add(d) }
 
 // Test eviction by ExpireAfterWrite
 func TestExpiring2Q_ExpireAfterWrite(t *testing.T) {
-	//use test timer for expiration
+	// use test timer for expiration
 	tt := newTestTimer()
 	elru, err := NewExpiring2Q(3, 30*time.Second, TimeTicker(tt.Now))
 	if err != nil {
@@ -330,19 +330,19 @@ func TestExpiring2Q_ExpireAfterWrite(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		elru.Add(i, i)
 	}
-	//test timer ticks 20 seconds
+	// test timer ticks 20 seconds
 	tt.Advance(20 * time.Second)
-	//add fresher entry <2,2> to cache
+	// add fresher entry <2,2> to cache
 	elru.Add(2, 2)
-	//Get(0),Get(1) will move 0, 1 to freq-used list
-	//2 will remain in recent-used list
+	// Get(0),Get(1) will move 0, 1 to freq-used list
+	// 2 will remain in recent-used list
 	for i := 0; i < 2; i++ {
 		elru.Get(i)
 	}
-	//test timer advance another 15 seconds, entries <0,0>,<1,1> timeout & expire now,
-	//so they should be evicted, although they are more recently retrieved than <2,2>
+	// test timer advance another 15 seconds, entries <0,0>,<1,1> timeout & expire now,
+	// so they should be evicted, although they are more recently retrieved than <2,2>
 	tt.Advance(15 * time.Second)
-	//next add 3,4; verify 0,1 will be evicted
+	// next add 3,4; verify 0,1 will be evicted
 	var ek, ev interface{}
 	for i := 3; i < 5; i++ {
 		evicted := elru.Add(i, i, &ek, &ev)
@@ -356,9 +356,9 @@ func TestExpiring2Q_ExpireAfterWrite(t *testing.T) {
 	}
 	keys := elru.Keys()
 	sort.Slice(keys, func(i, j int) bool { return keys[i].(int) < keys[j].(int) })
-	//althoug 0, 1 are touched twice (write & read) so
-	//they are in frequently used list, they are evicted because expiration
-	//and 2,3,4 will be kept
+	// althoug 0, 1 are touched twice (write & read) so
+	// they are in frequently used list, they are evicted because expiration
+	// and 2,3,4 will be kept
 	for i, v := range []int{2, 3, 4} {
 		if v != keys[i] {
 			t.Fatalf("Expiring LRU eviction failed, expected keys {2,3,4} left, but found %v", elru.Keys())
@@ -369,7 +369,7 @@ func TestExpiring2Q_ExpireAfterWrite(t *testing.T) {
 // Test eviction by ExpireAfterAccess: basically same access sequence as above case
 // but different result because of ExpireAfterAccess
 func TestExpiring2Q_ExpireAfterAccess(t *testing.T) {
-	//use test timer for expiration
+	// use test timer for expiration
 	tt := newTestTimer()
 	elru, err := NewExpiring2Q(3, 30*time.Second, TimeTicker(tt.Now), ExpireAfterAccess)
 	if err != nil {
@@ -378,20 +378,20 @@ func TestExpiring2Q_ExpireAfterAccess(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		elru.Add(i, i)
 	}
-	//test timer ticks 20 seconds
+	// test timer ticks 20 seconds
 	tt.Advance(20 * time.Second)
-	//add fresher entry <2,2> to cache
+	// add fresher entry <2,2> to cache
 	elru.Add(2, 2)
-	//Get(0),Get(1) will move 0, 1 to freq-used list
-	//also moved them to back in expire list with newer timestamp
-	//2 will remain in recent-used list
+	// Get(0),Get(1) will move 0, 1 to freq-used list
+	// also moved them to back in expire list with newer timestamp
+	// 2 will remain in recent-used list
 	for i := 0; i < 2; i++ {
 		elru.Get(i)
 	}
-	//test timer advance another 15 seconds, none expired
-	//and 2 in recent list
+	// test timer advance another 15 seconds, none expired
+	// and 2 in recent list
 	tt.Advance(15 * time.Second)
-	//next add 3,4; verify 2,3 will be evicted, because 0,1 in freq list, not expired
+	// next add 3,4; verify 2,3 will be evicted, because 0,1 in freq list, not expired
 	for i := 3; i < 5; i++ {
 		elru.Add(i, i)
 	}
@@ -400,7 +400,7 @@ func TestExpiring2Q_ExpireAfterAccess(t *testing.T) {
 	}
 	keys := elru.Keys()
 	sort.Slice(keys, func(i, j int) bool { return keys[i].(int) < keys[j].(int) })
-	//and 0,1,4 will be kept
+	// and 0,1,4 will be kept
 	for i, v := range []int{0, 1, 4} {
 		if v != keys[i] {
 			t.Fatalf("Expiring LRU eviction failed, expected keys {0,1,4} left, but found %v", elru.Keys())
@@ -410,7 +410,7 @@ func TestExpiring2Q_ExpireAfterAccess(t *testing.T) {
 
 // Test eviction by ExpireAfterWrite
 func TestExpiringARC_ExpireAfterWrite(t *testing.T) {
-	//use test timer for expiration
+	// use test timer for expiration
 	tt := newTestTimer()
 	elru, err := NewExpiringARC(3, 30*time.Second, TimeTicker(tt.Now))
 	if err != nil {
@@ -419,19 +419,19 @@ func TestExpiringARC_ExpireAfterWrite(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		elru.Add(i, i)
 	}
-	//test timer ticks 20 seconds
+	// test timer ticks 20 seconds
 	tt.Advance(20 * time.Second)
-	//add fresher entry <2,2> to cache
+	// add fresher entry <2,2> to cache
 	elru.Add(2, 2)
-	//Get(0),Get(1) will move 0, 1 to freq-used list
-	//2 will remain in recent-used list
+	// Get(0),Get(1) will move 0, 1 to freq-used list
+	// 2 will remain in recent-used list
 	for i := 0; i < 2; i++ {
 		elru.Get(i)
 	}
-	//test timer advance another 15 seconds, entries <0,0>,<1,1> timeout & expire now,
-	//so they should be evicted, although they are more recently retrieved than <2,2>
+	// test timer advance another 15 seconds, entries <0,0>,<1,1> timeout & expire now,
+	// so they should be evicted, although they are more recently retrieved than <2,2>
 	tt.Advance(15 * time.Second)
-	//next add 3,4; verify 0,1 will be evicted
+	// next add 3,4; verify 0,1 will be evicted
 	var ek, ev interface{}
 	for i := 3; i < 5; i++ {
 		evicted := elru.Add(i, i, &ek, &ev)
@@ -445,9 +445,9 @@ func TestExpiringARC_ExpireAfterWrite(t *testing.T) {
 	}
 	keys := elru.Keys()
 	sort.Slice(keys, func(i, j int) bool { return keys[i].(int) < keys[j].(int) })
-	//althoug 0, 1 are touched twice (write & read) so
-	//they are in frequently used list, they are evicted because expiration
-	//and 2,3,4 will be kept
+	// althoug 0, 1 are touched twice (write & read) so
+	// they are in frequently used list, they are evicted because expiration
+	// and 2,3,4 will be kept
 	for i, v := range []int{2, 3, 4} {
 		if v != keys[i] {
 			t.Fatalf("Expiring LRU eviction failed, expected keys {2,3,4} left, but found %v", elru.Keys())
@@ -458,7 +458,7 @@ func TestExpiringARC_ExpireAfterWrite(t *testing.T) {
 // Test eviction by ExpireAfterAccess: basically same access sequence as above case
 // but different result because of ExpireAfterAccess
 func TestExpiringARC_ExpireAfterAccess(t *testing.T) {
-	//use test timer for expiration
+	// use test timer for expiration
 	tt := newTestTimer()
 	elru, err := NewExpiringARC(3, 30*time.Second, TimeTicker(tt.Now), ExpireAfterAccess)
 	if err != nil {
@@ -467,20 +467,20 @@ func TestExpiringARC_ExpireAfterAccess(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		elru.Add(i, i)
 	}
-	//test timer ticks 20 seconds
+	// test timer ticks 20 seconds
 	tt.Advance(20 * time.Second)
-	//add fresher entry <2,2> to cache
+	// add fresher entry <2,2> to cache
 	elru.Add(2, 2)
-	//Get(0),Get(1) will move 0, 1 to freq-used list
-	//also moved them to back in expire list with newer timestamp
-	//2 will remain in recent-used list
+	// Get(0),Get(1) will move 0, 1 to freq-used list
+	// also moved them to back in expire list with newer timestamp
+	// 2 will remain in recent-used list
 	for i := 0; i < 2; i++ {
 		elru.Get(i)
 	}
-	//test timer advance another 15 seconds, none expired
-	//and 2 in recent list
+	// test timer advance another 15 seconds, none expired
+	// and 2 in recent list
 	tt.Advance(15 * time.Second)
-	//next add 3,4; verify 2,3 will be evicted, because 0,1 in freq list, not expired
+	// next add 3,4; verify 2,3 will be evicted, because 0,1 in freq list, not expired
 	for i := 3; i < 5; i++ {
 		elru.Add(i, i)
 	}
@@ -489,7 +489,7 @@ func TestExpiringARC_ExpireAfterAccess(t *testing.T) {
 	}
 	keys := elru.Keys()
 	sort.Slice(keys, func(i, j int) bool { return keys[i].(int) < keys[j].(int) })
-	//and 0,1,4 will be kept
+	// and 0,1,4 will be kept
 	for i, v := range []int{0, 1, 4} {
 		if v != keys[i] {
 			t.Fatalf("Expiring LRU eviction failed, expected keys {0,1,4} left, but found %v", elru.Keys())
@@ -499,7 +499,7 @@ func TestExpiringARC_ExpireAfterAccess(t *testing.T) {
 
 // Test eviction by ExpireAfterWrite
 func TestExpiringLRU_ExpireAfterWrite(t *testing.T) {
-	//use test timer for expiration
+	// use test timer for expiration
 	tt := newTestTimer()
 	elru, err := NewExpiringLRU(3, 30*time.Second, TimeTicker(tt.Now))
 	if err != nil {
@@ -508,19 +508,19 @@ func TestExpiringLRU_ExpireAfterWrite(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		elru.Add(i, i)
 	}
-	//test timer ticks 20 seconds
+	// test timer ticks 20 seconds
 	tt.Advance(20 * time.Second)
-	//add fresher entry <2,2> to cache
+	// add fresher entry <2,2> to cache
 	elru.Add(2, 2)
-	//Get(0),Get(1) will move 0, 1 to freq-used list
-	//2 will remain in recent-used list
+	// Get(0),Get(1) will move 0, 1 to freq-used list
+	// 2 will remain in recent-used list
 	for i := 0; i < 2; i++ {
 		elru.Get(i)
 	}
-	//test timer advance another 15 seconds, entries <0,0>,<1,1> timeout & expire now,
-	//so they should be evicted, although they are more recently retrieved than <2,2>
+	// test timer advance another 15 seconds, entries <0,0>,<1,1> timeout & expire now,
+	// so they should be evicted, although they are more recently retrieved than <2,2>
 	tt.Advance(15 * time.Second)
-	//next add 3,4; verify 0,1 will be evicted
+	// next add 3,4; verify 0,1 will be evicted
 	var ek, ev interface{}
 	for i := 3; i < 5; i++ {
 		evicted := elru.Add(i, i, &ek, &ev)
@@ -534,9 +534,9 @@ func TestExpiringLRU_ExpireAfterWrite(t *testing.T) {
 	}
 	keys := elru.Keys()
 	sort.Slice(keys, func(i, j int) bool { return keys[i].(int) < keys[j].(int) })
-	//althoug 0, 1 are touched twice (write & read) so
-	//they are in frequently used list, they are evicted because expiration
-	//and 2,3,4 will be kept
+	// althoug 0, 1 are touched twice (write & read) so
+	// they are in frequently used list, they are evicted because expiration
+	// and 2,3,4 will be kept
 	for i, v := range []int{2, 3, 4} {
 		if v != keys[i] {
 			t.Fatalf("Expiring LRU eviction failed, expected keys {2,3,4} left, but found %v", elru.Keys())
@@ -547,7 +547,7 @@ func TestExpiringLRU_ExpireAfterWrite(t *testing.T) {
 // Test eviction by ExpireAfterAccess: basically same access sequence as above case
 // but different result because of ExpireAfterAccess
 func TestExpiringLRU_ExpireAfterAccess(t *testing.T) {
-	//use test timer for expiration
+	// use test timer for expiration
 	tt := newTestTimer()
 	elru, err := NewExpiringLRU(3, 30*time.Second, TimeTicker(tt.Now), ExpireAfterAccess)
 	if err != nil {
@@ -556,19 +556,19 @@ func TestExpiringLRU_ExpireAfterAccess(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		elru.Add(i, i)
 	}
-	//test timer ticks 20 seconds
+	// test timer ticks 20 seconds
 	tt.Advance(20 * time.Second)
-	//add fresher entry <2,2> to cache
+	// add fresher entry <2,2> to cache
 	elru.Add(2, 2)
-	//Get(0),Get(1) will move 0, 1 to back of access list
-	//also moved them to back in expire list with newer timestamp
-	//access list will be 2,0,1
+	// Get(0),Get(1) will move 0, 1 to back of access list
+	// also moved them to back in expire list with newer timestamp
+	// access list will be 2,0,1
 	for i := 0; i < 2; i++ {
 		elru.Get(i)
 	}
-	//test timer advance another 15 seconds, none expired
+	// test timer advance another 15 seconds, none expired
 	tt.Advance(15 * time.Second)
-	//next add 3,4; verify 2,0 will be evicted
+	// next add 3,4; verify 2,0 will be evicted
 	for i := 3; i < 5; i++ {
 		elru.Add(i, i)
 	}
@@ -577,7 +577,7 @@ func TestExpiringLRU_ExpireAfterAccess(t *testing.T) {
 	}
 	keys := elru.Keys()
 	sort.Slice(keys, func(i, j int) bool { return keys[i].(int) < keys[j].(int) })
-	//and 1,3,4 will be kept
+	// and 1,3,4 will be kept
 	for i, v := range []int{1, 3, 4} {
 		if v != keys[i] {
 			t.Fatalf("Expiring LRU eviction failed, expected keys {1,3,4} left, but found %v", elru.Keys())

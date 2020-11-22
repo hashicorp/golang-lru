@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-//common interface shared by 2q, arc and simple LRU, used as interface of backing LRU
+// common interface shared by 2q, arc and simple LRU, used as interface of backing LRU
 type lruCache interface {
 	// Adds a value to the cache, returns evicted <k,v> if happened and
 	// updates the "recently used"-ness of the key.
@@ -40,7 +40,7 @@ func (e entry) String() string {
 	return fmt.Sprintf("%v,%v  %v", e.key, e.val, e.expirationTime)
 }
 
-//two expiration policies
+// two expiration policies
 type expiringType byte
 
 const (
@@ -57,7 +57,7 @@ type ExpiringCache struct {
 	expiration time.Duration
 	expireList *expireList
 	expireType expiringType
-	//placeholder for time.Now() for easier testing setup
+	// placeholder for time.Now() for easier testing setup
 	timeNow func() time.Time
 	lock    RWLocker
 }
@@ -68,7 +68,7 @@ type OptionExp func(c *ExpiringCache) error
 // NewExpiring2Q creates an expiring cache with specifized
 // size and entries lifetime duration, backed by a 2-queue LRU
 func NewExpiring2Q(size int, expir time.Duration, opts ...OptionExp) (elru *ExpiringCache, err error) {
-	//create a non synced LRU as backing store
+	// create a non synced LRU as backing store
 	lru, err := New2Q(size, NoLock2Q)
 	if err != nil {
 		return
@@ -80,7 +80,7 @@ func NewExpiring2Q(size int, expir time.Duration, opts ...OptionExp) (elru *Expi
 // NewExpiringARC creates an expiring cache with specifized
 // size and entries lifetime duration, backed by a ARC LRU
 func NewExpiringARC(size int, expir time.Duration, opts ...OptionExp) (elru *ExpiringCache, err error) {
-	//create a non synced LRU as backing store
+	// create a non synced LRU as backing store
 	lru, err := NewARC(size, NoLockARC)
 	if err != nil {
 		return
@@ -92,7 +92,7 @@ func NewExpiringARC(size int, expir time.Duration, opts ...OptionExp) (elru *Exp
 // NewExpiringLRU creates an expiring cache with specifized
 // size and entries lifetime duration, backed by a simple LRU
 func NewExpiringLRU(size int, expir time.Duration, opts ...OptionExp) (elru *ExpiringCache, err error) {
-	//create a non synced LRU as backing store
+	// create a non synced LRU as backing store
 	lru, err := New(size, NoLock)
 	if err != nil {
 		return
@@ -104,7 +104,7 @@ func NewExpiringLRU(size int, expir time.Duration, opts ...OptionExp) (elru *Exp
 // Expiring will wrap an existing LRU to make its entries
 // expiring with specified duration
 func Expiring(expir time.Duration, lru lruCache, opts ...OptionExp) (*ExpiringCache, error) {
-	//create expiring cache with default settings
+	// create expiring cache with default settings
 	elru := &ExpiringCache{
 		lru:        lru,
 		expiration: expir,
@@ -113,7 +113,7 @@ func Expiring(expir time.Duration, lru lruCache, opts ...OptionExp) (*ExpiringCa
 		timeNow:    time.Now,
 		lock:       &sync.RWMutex{},
 	}
-	//apply options to customize
+	// apply options to customize
 	for _, opt := range opts {
 		if err := opt(elru); err != nil {
 			return nil, err
@@ -165,15 +165,15 @@ func (elru *ExpiringCache) AddWithTTL(k, v interface{}, expiration time.Duration
 	var ent *entry
 	var expired []*entry
 	if ent0, _ := elru.lru.Peek(k); ent0 != nil {
-		//update existing cache entry
+		// update existing cache entry
 		ent = ent0.(*entry)
 		ent.val = v
 		ent.expirationTime = now.Add(expiration)
 		elru.expireList.MoveToFront(ent)
 	} else {
-		//first remove 1 possible expiration to add space for new entry
+		// first remove 1 possible expiration to add space for new entry
 		expired = elru.removeExpired(now, false)
-		//add new entry to expiration list
+		// add new entry to expiration list
 		ent = &entry{
 			key:            k,
 			val:            v,
@@ -184,7 +184,7 @@ func (elru *ExpiringCache) AddWithTTL(k, v interface{}, expiration time.Duration
 	// Add/Update cache entry in backing cache
 	var evictedKey, evictedVal interface{}
 	evicted = elru.lru.Add(k, ent, &evictedKey, &evictedVal)
-	//remove evicted ent from expireList
+	// remove evicted ent from expireList
 	if evicted {
 		ent = evictedVal.(*entry)
 		evictedVal = ent.val
@@ -200,7 +200,7 @@ func (elru *ExpiringCache) AddWithTTL(k, v interface{}, expiration time.Duration
 	if evicted && len(evictedKeyVal) > 1 {
 		*evictedKeyVal[1] = evictedVal
 	}
-	return
+	return evicted
 }
 
 // Get returns key's value from the cache if found
@@ -259,7 +259,7 @@ func (elru *ExpiringCache) Contains(k interface{}) bool {
 func (elru *ExpiringCache) Keys() []interface{} {
 	elru.lock.Lock()
 	defer elru.lock.Unlock()
-	//to get accurate key set, remove all expired
+	// to get accurate key set, remove all expired
 	elru.removeExpired(elru.timeNow(), true)
 	return elru.lru.Keys()
 }
@@ -268,7 +268,7 @@ func (elru *ExpiringCache) Keys() []interface{} {
 func (elru *ExpiringCache) Len() int {
 	elru.lock.Lock()
 	defer elru.lock.Unlock()
-	//to get accurate size, remove all expired
+	// to get accurate size, remove all expired
 	elru.removeExpired(elru.timeNow(), true)
 	return elru.lru.Len()
 }
@@ -281,7 +281,7 @@ func (elru *ExpiringCache) Purge() {
 	elru.lru.Purge()
 }
 
-//either remove one (the oldest expired), or all expired
+// either remove one (the oldest expired), or all expired
 func (elru *ExpiringCache) removeExpired(now time.Time, removeAllExpired bool) (res []*entry) {
 	res = elru.expireList.RemoveExpired(now, removeAllExpired)
 	for i := 0; i < len(res); i++ {
@@ -311,8 +311,8 @@ func (el *expireList) Init() {
 }
 
 func (el *expireList) PushFront(ent *entry) {
-	//When all operations use ExpiringCache default expiration,
-	//PushFront should succeed at first/front entry of list
+	// When all operations use ExpiringCache default expiration,
+	// PushFront should succeed at first/front entry of list
 	for e := el.expList.Front(); e != nil; e = e.Next() {
 		if !ent.expirationTime.Before(e.Value.(*entry).expirationTime) {
 			ent.elem = el.expList.InsertBefore(ent, e)
@@ -323,8 +323,8 @@ func (el *expireList) PushFront(ent *entry) {
 }
 
 func (el *expireList) MoveToFront(ent *entry) {
-	//When all operations use ExpiringCache default expiration,
-	//MoveToFront should succeed at first/front entry of list
+	// When all operations use ExpiringCache default expiration,
+	// MoveToFront should succeed at first/front entry of list
 	for e := el.expList.Front(); e != nil; e = e.Next() {
 		if !ent.expirationTime.Before(e.Value.(*entry).expirationTime) {
 			el.expList.MoveBefore(ent.elem, e)
@@ -338,14 +338,14 @@ func (el *expireList) Remove(ent *entry) interface{} {
 	return el.expList.Remove(ent.elem)
 }
 
-//either remove one (the oldest expired), or remove all expired
+// either remove one (the oldest expired), or remove all expired
 func (el *expireList) RemoveExpired(now time.Time, removeAllExpired bool) (res []*entry) {
 	for {
 		back := el.expList.Back()
 		if back == nil || back.Value.(*entry).expirationTime.After(now) {
 			break
 		}
-		//expired
+		// expired
 		ent := el.expList.Remove(back).(*entry)
 		res = append(res, ent)
 		if !removeAllExpired {

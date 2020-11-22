@@ -60,7 +60,7 @@ func NewARC(size int, opts ...OptionARC) (*ARCCache, error) {
 		b2:   b2,
 		lock: &sync.RWMutex{},
 	}
-	//apply option settings
+	// Apply option settings
 	for _, opt := range opts {
 		if err = opt(c); err != nil {
 			return nil, err
@@ -117,7 +117,8 @@ func (c *ARCCache) Add(key, value interface{}, evictedKeyVal ...*interface{}) (e
 	}
 
 	var evictedKey, evictedValue interface{}
-	if c.b1.Contains(key) {
+	switch {
+	case c.b1.Contains(key):
 		// Check if this value was recently evicted as part of the
 		// recently used list
 		// T1 set is too small, increase P appropriately
@@ -144,7 +145,7 @@ func (c *ARCCache) Add(key, value interface{}, evictedKeyVal ...*interface{}) (e
 		// Add the key to the frequently used list
 		c.t2.Add(key, value)
 
-	} else if c.b2.Contains(key) {
+	case c.b2.Contains(key):
 		// Check if this value was recently evicted as part of the
 		// frequently used list
 		// T2 set is too small, decrease P appropriately
@@ -170,7 +171,7 @@ func (c *ARCCache) Add(key, value interface{}, evictedKeyVal ...*interface{}) (e
 
 		// Add the key to the frequently used list
 		c.t2.Add(key, value)
-	} else {
+	default:
 		// Brand new entry
 		// Potentially need to make room in the cache
 		if c.t1.Len()+c.t2.Len() >= c.size {
@@ -194,7 +195,7 @@ func (c *ARCCache) Add(key, value interface{}, evictedKeyVal ...*interface{}) (e
 	if evicted && len(evictedKeyVal) > 1 {
 		*evictedKeyVal[1] = evictedValue
 	}
-	return
+	return evicted
 }
 
 // replace is used to adaptively evict from either T1 or T2

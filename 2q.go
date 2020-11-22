@@ -85,7 +85,7 @@ func New2QParams(size int, recentRatio, ghostRatio float64, opts ...Option2Q) (*
 		recentEvict: recentEvict,
 		lock:        &sync.RWMutex{},
 	}
-	//apply options for customization
+	// Apply options for customization
 	for _, opt := range opts {
 		if err = opt(c); err != nil {
 			return nil, err
@@ -160,7 +160,7 @@ func (c *TwoQueueCache) Add(key, value interface{}, evictedKeyVal ...*interface{
 	if evicted && len(evictedKeyVal) > 1 {
 		*evictedKeyVal[1] = evictedValue
 	}
-	return
+	return evicted
 }
 
 // ensureSpace is used to ensure we have space in the cache
