@@ -33,18 +33,21 @@ type TwoQueueCache struct {
 	recent      simplelru.LRUCache
 	frequent    simplelru.LRUCache
 	recentEvict simplelru.LRUCache
-	lock        sync.RWMutex
+	lock        RWLocker
 }
+
+// Option2Q define option to customize TwoQueueCache
+type Option2Q func(c *TwoQueueCache) error
 
 // New2Q creates a new TwoQueueCache using the default
 // values for the parameters.
-func New2Q(size int) (*TwoQueueCache, error) {
-	return New2QParams(size, Default2QRecentRatio, Default2QGhostEntries)
+func New2Q(size int, opts ...Option2Q) (*TwoQueueCache, error) {
+	return New2QParams(size, Default2QRecentRatio, Default2QGhostEntries, opts...)
 }
 
 // New2QParams creates a new TwoQueueCache using the provided
 // parameter values.
-func New2QParams(size int, recentRatio, ghostRatio float64) (*TwoQueueCache, error) {
+func New2QParams(size int, recentRatio, ghostRatio float64, opts ...Option2Q) (*TwoQueueCache, error) {
 	if size <= 0 {
 		return nil, fmt.Errorf("invalid size")
 	}
@@ -80,8 +83,21 @@ func New2QParams(size int, recentRatio, ghostRatio float64) (*TwoQueueCache, err
 		recent:      recent,
 		frequent:    frequent,
 		recentEvict: recentEvict,
+		lock:        &sync.RWMutex{},
+	}
+	//apply options for customization
+	for _, opt := range opts {
+		if err = opt(c); err != nil {
+			return nil, err
+		}
 	}
 	return c, nil
+}
+
+// NoLock2Q disables locking for TwoQueueCache
+func NoLock2Q(c *TwoQueueCache) error {
+	c.lock = NoOpRWLocker{}
+	return nil
 }
 
 // Get looks up a key's value from the cache.
@@ -106,8 +122,8 @@ func (c *TwoQueueCache) Get(key interface{}) (value interface{}, ok bool) {
 	return nil, false
 }
 
-// Add adds a value to the cache.
-func (c *TwoQueueCache) Add(key, value interface{}) {
+// Add adds a value to the cache, return evicted key/val if eviction happens.
+func (c *TwoQueueCache) Add(key, value interface{}, evictedKeyVal ...*interface{}) (evicted bool) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -126,22 +142,29 @@ func (c *TwoQueueCache) Add(key, value interface{}) {
 		return
 	}
 
+	var evictedKey, evictedValue interface{}
 	// If the value was recently evicted, add it to the
 	// frequently used list
 	if c.recentEvict.Contains(key) {
-		c.ensureSpace(true)
+		evictedKey, evictedValue, evicted = c.ensureSpace(true)
 		c.recentEvict.Remove(key)
 		c.frequent.Add(key, value)
-		return
+	} else {
+		// Add to the recently seen list
+		evictedKey, evictedValue, evicted = c.ensureSpace(false)
+		c.recent.Add(key, value)
 	}
-
-	// Add to the recently seen list
-	c.ensureSpace(false)
-	c.recent.Add(key, value)
+	if evicted && len(evictedKeyVal) > 0 {
+		*evictedKeyVal[0] = evictedKey
+	}
+	if evicted && len(evictedKeyVal) > 1 {
+		*evictedKeyVal[1] = evictedValue
+	}
+	return
 }
 
 // ensureSpace is used to ensure we have space in the cache
-func (c *TwoQueueCache) ensureSpace(recentEvict bool) {
+func (c *TwoQueueCache) ensureSpace(recentEvict bool) (key, value interface{}, evicted bool) {
 	// If we have space, nothing to do
 	recentLen := c.recent.Len()
 	freqLen := c.frequent.Len()
@@ -152,13 +175,13 @@ func (c *TwoQueueCache) ensureSpace(recentEvict bool) {
 	// If the recent buffer is larger than
 	// the target, evict from there
 	if recentLen > 0 && (recentLen > c.recentSize || (recentLen == c.recentSize && !recentEvict)) {
-		k, _, _ := c.recent.RemoveOldest()
-		c.recentEvict.Add(k, nil)
+		key, value, evicted = c.recent.RemoveOldest()
+		c.recentEvict.Add(key, nil)
 		return
 	}
 
 	// Remove from the frequent list otherwise
-	c.frequent.RemoveOldest()
+	return c.frequent.RemoveOldest()
 }
 
 // Len returns the number of items in the cache.
@@ -179,18 +202,17 @@ func (c *TwoQueueCache) Keys() []interface{} {
 }
 
 // Remove removes the provided key from the cache.
-func (c *TwoQueueCache) Remove(key interface{}) {
+func (c *TwoQueueCache) Remove(key interface{}) bool {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	if c.frequent.Remove(key) {
-		return
+		return true
 	}
 	if c.recent.Remove(key) {
-		return
+		return true
 	}
-	if c.recentEvict.Remove(key) {
-		return
-	}
+	c.recentEvict.Remove(key)
+	return false
 }
 
 // Purge is used to completely clear the cache.

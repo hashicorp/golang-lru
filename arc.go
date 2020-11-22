@@ -24,11 +24,14 @@ type ARCCache struct {
 	t2 simplelru.LRUCache // T2 is the LRU for frequently accessed items
 	b2 simplelru.LRUCache // B2 is the LRU for evictions from t2
 
-	lock sync.RWMutex
+	lock RWLocker
 }
 
+// OptionARC defines option to customize ARCCache
+type OptionARC func(*ARCCache) error
+
 // NewARC creates an ARC of the given size
-func NewARC(size int) (*ARCCache, error) {
+func NewARC(size int, opts ...OptionARC) (*ARCCache, error) {
 	// Create the sub LRUs
 	b1, err := simplelru.NewLRU(size, nil)
 	if err != nil {
@@ -55,8 +58,21 @@ func NewARC(size int) (*ARCCache, error) {
 		b1:   b1,
 		t2:   t2,
 		b2:   b2,
+		lock: &sync.RWMutex{},
+	}
+	//apply option settings
+	for _, opt := range opts {
+		if err = opt(c); err != nil {
+			return nil, err
+		}
 	}
 	return c, nil
+}
+
+// NoLockARC disables locking for ARCCache
+func NoLockARC(c *ARCCache) error {
+	c.lock = NoOpRWLocker{}
+	return nil
 }
 
 // Get looks up a key's value from the cache.
@@ -81,8 +97,8 @@ func (c *ARCCache) Get(key interface{}) (value interface{}, ok bool) {
 	return nil, false
 }
 
-// Add adds a value to the cache.
-func (c *ARCCache) Add(key, value interface{}) {
+// Add adds a value to the cache, return evicted key/val if it happens.
+func (c *ARCCache) Add(key, value interface{}, evictedKeyVal ...*interface{}) (evicted bool) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -100,9 +116,10 @@ func (c *ARCCache) Add(key, value interface{}) {
 		return
 	}
 
-	// Check if this value was recently evicted as part of the
-	// recently used list
+	var evictedKey, evictedValue interface{}
 	if c.b1.Contains(key) {
+		// Check if this value was recently evicted as part of the
+		// recently used list
 		// T1 set is too small, increase P appropriately
 		delta := 1
 		b1Len := c.b1.Len()
@@ -118,7 +135,7 @@ func (c *ARCCache) Add(key, value interface{}) {
 
 		// Potentially need to make room in the cache
 		if c.t1.Len()+c.t2.Len() >= c.size {
-			c.replace(false)
+			evictedKey, evictedValue, evicted = c.replace(false)
 		}
 
 		// Remove from B1
@@ -126,12 +143,10 @@ func (c *ARCCache) Add(key, value interface{}) {
 
 		// Add the key to the frequently used list
 		c.t2.Add(key, value)
-		return
-	}
 
-	// Check if this value was recently evicted as part of the
-	// frequently used list
-	if c.b2.Contains(key) {
+	} else if c.b2.Contains(key) {
+		// Check if this value was recently evicted as part of the
+		// frequently used list
 		// T2 set is too small, decrease P appropriately
 		delta := 1
 		b1Len := c.b1.Len()
@@ -147,7 +162,7 @@ func (c *ARCCache) Add(key, value interface{}) {
 
 		// Potentially need to make room in the cache
 		if c.t1.Len()+c.t2.Len() >= c.size {
-			c.replace(true)
+			evictedKey, evictedValue, evicted = c.replace(true)
 		}
 
 		// Remove from B2
@@ -155,41 +170,49 @@ func (c *ARCCache) Add(key, value interface{}) {
 
 		// Add the key to the frequently used list
 		c.t2.Add(key, value)
-		return
-	}
+	} else {
+		// Brand new entry
+		// Potentially need to make room in the cache
+		if c.t1.Len()+c.t2.Len() >= c.size {
+			evictedKey, evictedValue, evicted = c.replace(false)
+		}
 
-	// Potentially need to make room in the cache
-	if c.t1.Len()+c.t2.Len() >= c.size {
-		c.replace(false)
-	}
+		// Keep the size of the ghost buffers trim
+		if c.b1.Len() > c.size-c.p {
+			c.b1.RemoveOldest()
+		}
+		if c.b2.Len() > c.p {
+			c.b2.RemoveOldest()
+		}
 
-	// Keep the size of the ghost buffers trim
-	if c.b1.Len() > c.size-c.p {
-		c.b1.RemoveOldest()
+		// Add to the recently seen list
+		c.t1.Add(key, value)
 	}
-	if c.b2.Len() > c.p {
-		c.b2.RemoveOldest()
+	if evicted && len(evictedKeyVal) > 0 {
+		*evictedKeyVal[0] = evictedKey
 	}
-
-	// Add to the recently seen list
-	c.t1.Add(key, value)
+	if evicted && len(evictedKeyVal) > 1 {
+		*evictedKeyVal[1] = evictedValue
+	}
+	return
 }
 
 // replace is used to adaptively evict from either T1 or T2
 // based on the current learned value of P
-func (c *ARCCache) replace(b2ContainsKey bool) {
+func (c *ARCCache) replace(b2ContainsKey bool) (k, v interface{}, ok bool) {
 	t1Len := c.t1.Len()
 	if t1Len > 0 && (t1Len > c.p || (t1Len == c.p && b2ContainsKey)) {
-		k, _, ok := c.t1.RemoveOldest()
+		k, v, ok = c.t1.RemoveOldest()
 		if ok {
 			c.b1.Add(k, nil)
 		}
 	} else {
-		k, _, ok := c.t2.RemoveOldest()
+		k, v, ok = c.t2.RemoveOldest()
 		if ok {
 			c.b2.Add(k, nil)
 		}
 	}
+	return
 }
 
 // Len returns the number of cached entries
@@ -209,21 +232,22 @@ func (c *ARCCache) Keys() []interface{} {
 }
 
 // Remove is used to purge a key from the cache
-func (c *ARCCache) Remove(key interface{}) {
+func (c *ARCCache) Remove(key interface{}) bool {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	if c.t1.Remove(key) {
-		return
+		return true
 	}
 	if c.t2.Remove(key) {
-		return
+		return true
 	}
 	if c.b1.Remove(key) {
-		return
+		return false
 	}
 	if c.b2.Remove(key) {
-		return
+		return false
 	}
+	return false
 }
 
 // Purge is used to clear the cache
