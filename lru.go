@@ -9,42 +9,26 @@ import (
 // Cache is a thread-safe fixed size LRU cache.
 type Cache struct {
 	lru  simplelru.LRUCache
-	lock RWLocker
+	lock sync.RWMutex
 }
 
-// Option to customize LRUCache
-type Option func(*Cache) error
-
 // New creates an LRU of the given size.
-func New(size int, opts ...Option) (*Cache, error) {
-	return NewWithEvict(size, nil, opts...)
+func New(size int) (*Cache, error) {
+	return NewWithEvict(size, nil)
 }
 
 // NewWithEvict constructs a fixed size cache with the given eviction
 // callback.
-func NewWithEvict(size int, onEvicted func(key interface{}, value interface{}), opts ...Option) (*Cache, error) {
+func NewWithEvict(size int, onEvicted func(key interface{}, value interface{})) (*Cache, error) {
 	// create a cache with default settings
 	lru, err := simplelru.NewLRU(size, simplelru.EvictCallback(onEvicted))
 	if err != nil {
 		return nil, err
 	}
 	c := &Cache{
-		lru:  lru,
-		lock: &sync.RWMutex{},
-	}
-	// apply options for custimization
-	for _, opt := range opts {
-		if err = opt(c); err != nil {
-			return nil, err
-		}
+		lru: lru,
 	}
 	return c, nil
-}
-
-// NoLock disables locking for LRUCache
-func NoLock(c *Cache) error {
-	c.lock = NoOpRWLocker{}
-	return nil
 }
 
 // Purge is used to completely clear the cache.

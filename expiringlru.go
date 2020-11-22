@@ -61,7 +61,7 @@ type ExpiringCache struct {
 	expireType expiringType
 	// placeholder for time.Now() for easier testing setup
 	timeNow func() time.Time
-	lock    RWLocker
+	lock    sync.RWMutex
 }
 
 // OptionExp defines option to customize ExpiringCache
@@ -70,8 +70,7 @@ type OptionExp func(c *ExpiringCache) error
 // NewExpiring2Q creates an expiring cache with specifized
 // size and entries lifetime duration, backed by a 2-queue LRU
 func NewExpiring2Q(size int, expir time.Duration, opts ...OptionExp) (elru *ExpiringCache, err error) {
-	// create a non synced LRU as backing store
-	lru, err := New2Q(size, NoLock2Q)
+	lru, err := simplelru.New2Q(size)
 	if err != nil {
 		return
 	}
@@ -82,8 +81,7 @@ func NewExpiring2Q(size int, expir time.Duration, opts ...OptionExp) (elru *Expi
 // NewExpiringARC creates an expiring cache with specifized
 // size and entries lifetime duration, backed by a ARC LRU
 func NewExpiringARC(size int, expir time.Duration, opts ...OptionExp) (elru *ExpiringCache, err error) {
-	// create a non synced LRU as backing store
-	lru, err := NewARC(size, NoLockARC)
+	lru, err := simplelru.NewARC(size)
 	if err != nil {
 		return
 	}
@@ -94,7 +92,6 @@ func NewExpiringARC(size int, expir time.Duration, opts ...OptionExp) (elru *Exp
 // NewExpiringLRU creates an expiring cache with specifized
 // size and entries lifetime duration, backed by a simple LRU
 func NewExpiringLRU(size int, expir time.Duration, opts ...OptionExp) (elru *ExpiringCache, err error) {
-	// create a non synced LRU as backing store
 	lru, err := simplelru.NewLRU(size, nil)
 	if err != nil {
 		return
@@ -113,7 +110,6 @@ func Expiring(expir time.Duration, lru lruCache, opts ...OptionExp) (*ExpiringCa
 		expireList: newExpireList(),
 		expireType: expireAfterWrite,
 		timeNow:    time.Now,
-		lock:       &sync.RWMutex{},
 	}
 	// apply options to customize
 	for _, opt := range opts {
@@ -122,12 +118,6 @@ func Expiring(expir time.Duration, lru lruCache, opts ...OptionExp) (*ExpiringCa
 		}
 	}
 	return elru, nil
-}
-
-// NoLockExp disables locking for ExpiringCache
-func NoLockExp(elru *ExpiringCache) error {
-	elru.lock = NoOpRWLocker{}
-	return nil
 }
 
 // ExpireAfterWrite sets expiring policy
