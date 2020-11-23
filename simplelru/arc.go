@@ -12,11 +12,11 @@ type ARCLRU struct {
 	size int // Size is the total capacity of the cache
 	p    int // P is the dynamic preference towards T1 or T2
 
-	t1 *LRU // T1 is the LRU for recently accessed items
-	b1 *LRU // B1 is the LRU for evictions from t1
+	t1 LRUCache // T1 is the LRU for recently accessed items
+	b1 LRUCache // B1 is the LRU for evictions from t1
 
-	t2 *LRU // T2 is the LRU for frequently accessed items
-	b2 *LRU // B2 is the LRU for evictions from t2
+	t2 LRUCache // T2 is the LRU for frequently accessed items
+	b2 LRUCache // B2 is the LRU for evictions from t2
 }
 
 // NewARC creates an ARC of the given size

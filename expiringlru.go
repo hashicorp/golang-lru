@@ -55,6 +55,7 @@ const (
 // expireAfterAccess and expireAfterWrite (default)
 // Internally keep a expireList sorted by entries' expirationTime
 type ExpiringCache struct {
+	size       int
 	lru        lruCache
 	expiration time.Duration
 	expireList *expireList
@@ -334,16 +335,22 @@ func (el *expireList) Remove(ent *entry) interface{} {
 
 // either remove one (the oldest expired), or remove all expired
 func (el *expireList) RemoveExpired(now time.Time, removeAllExpired bool) (res []*entry) {
-	for {
-		back := el.expList.Back()
-		if back == nil || back.Value.(*entry).expirationTime.After(now) {
-			break
-		}
-		// expired
-		ent := el.expList.Remove(back).(*entry)
-		res = append(res, ent)
-		if !removeAllExpired {
-			break
+	back := el.expList.Back()
+	if back == nil || back.Value.(*entry).expirationTime.After(now) {
+		return
+	}
+	// expired
+	ent := el.expList.Remove(back).(*entry)
+	res = append(res, ent)
+	if removeAllExpired {
+		for {
+			back = el.expList.Back()
+			if back == nil || back.Value.(*entry).expirationTime.After(now) {
+				break
+			}
+			// expired
+			ent := el.expList.Remove(back).(*entry)
+			res = append(res, ent)
 		}
 	}
 	return

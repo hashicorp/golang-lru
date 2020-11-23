@@ -27,9 +27,9 @@ type TwoQueueLRU struct {
 	size       int
 	recentSize int
 
-	recent      *LRU
-	frequent    *LRU
-	recentEvict *LRU
+	recent      LRUCache
+	frequent    LRUCache
+	recentEvict LRUCache
 }
 
 // New2Q creates a new TwoQueueLRU using the default
