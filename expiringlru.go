@@ -55,7 +55,6 @@ const (
 // expireAfterAccess and expireAfterWrite (default)
 // Internally keep a expireList sorted by entries' expirationTime
 type ExpiringCache struct {
-	size       int
 	lru        lruCache
 	expiration time.Duration
 	expireList *expireList
