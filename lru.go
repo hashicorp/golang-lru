@@ -52,7 +52,6 @@ func (c *Cache) MAdd(keys, values []interface{}, evicteds []bool) {
 		evicteds[i] = c.lru.Add(key, values[i])
 	}
 	c.lock.Unlock()
-	return
 }
 
 // Get looks up a key's value from the cache.
@@ -70,7 +69,6 @@ func (c *Cache) MGet(keys, values []interface{}, oks []bool) {
 		values[i], oks[i] = c.lru.Get(key)
 	}
 	c.lock.Unlock()
-	return
 }
 
 // Contains checks if a key is in the cache, without updating the
