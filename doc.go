@@ -16,6 +16,9 @@
 // ARC has been patented by IBM, so do not use it if that is problematic for
 // your program.
 //
+// ExpiringCache wraps one of the above caches and make their entries expiring
+// according to policies:  ExpireAfterAccess or ExpireAfterWrite.
+//
 // All caches in this package take locks while operating, and are therefore
 // thread-safe for consumers.
 package lru

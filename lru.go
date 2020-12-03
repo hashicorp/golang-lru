@@ -8,7 +8,7 @@ import (
 
 // Cache is a thread-safe fixed size LRU cache.
 type Cache struct {
-	lru  simplelru.LRUCache
+	lru  *simplelru.LRU
 	lock sync.RWMutex
 }
 
@@ -20,6 +20,7 @@ func New(size int) (*Cache, error) {
 // NewWithEvict constructs a fixed size cache with the given eviction
 // callback.
 func NewWithEvict(size int, onEvicted func(key interface{}, value interface{})) (*Cache, error) {
+	// create a cache with default settings
 	lru, err := simplelru.NewLRU(size, simplelru.EvictCallback(onEvicted))
 	if err != nil {
 		return nil, err
@@ -37,10 +38,10 @@ func (c *Cache) Purge() {
 	c.lock.Unlock()
 }
 
-// Add adds a value to the cache. Returns true if an eviction occurred.
-func (c *Cache) Add(key, value interface{}) (evicted bool) {
+// Add adds a value to the cache. Returns true and evicted key/val if an eviction occurred.
+func (c *Cache) Add(key, value interface{}, evictedKeyVal ...*interface{}) (evicted bool) {
 	c.lock.Lock()
-	evicted = c.lru.Add(key, value)
+	evicted = c.lru.Add(key, value, evictedKeyVal...)
 	c.lock.Unlock()
 	return evicted
 }
