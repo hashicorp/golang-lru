@@ -274,10 +274,15 @@ func (elru *ExpiringCache) Purge() {
 }
 
 // RemoveAllExpired remove all expired entries, can be called by cleanup goroutine
-func (elru *ExpiringCache) RemoveAllExpired() {
+func (elru *ExpiringCache) RemoveAllExpired() (keys []interface{}, vals []interface{}) {
 	elru.lock.Lock()
 	defer elru.lock.Unlock()
-	elru.removeExpired(elru.timeNow(), true)
+	ents := elru.removeExpired(elru.timeNow(), true)
+	for _, ent := range ents {
+		keys = append(keys, ent.key)
+		vals = append(vals, ent.val)
+	}
+	return
 }
 
 // either remove one (the oldest expired), or all expired
