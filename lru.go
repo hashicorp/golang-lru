@@ -7,6 +7,7 @@ import (
 )
 
 const (
+	// DefaultEvictedBufferSize defines the default buffer size to store evicted key/val
 	DefaultEvictedBufferSize = 16
 )
 
@@ -43,8 +44,8 @@ func (c *Cache) initEvictBuffers() {
 	c.evictedVals = make([]interface{}, 0, DefaultEvictedBufferSize)
 }
 
-//evicted key/val will be buffered and sent in externally registered callback 
-//outside of critical section
+// onEvicted save evicted key/val and sent in externally registered callback
+// outside of critical section
 func (c *Cache) onEvicted(k, v interface{}) {
 	c.evictedKeys = append(c.evictedKeys, k)
 	c.evictedVals = append(c.evictedVals, v)
@@ -60,7 +61,7 @@ func (c *Cache) Purge() {
 		c.initEvictBuffers()
 	}
 	c.lock.Unlock()
-	//invoke callback outside of critical section
+	// invoke callback outside of critical section
 	if c.onEvictedCB != nil {
 		for i := 0; i < len(ks); i++ {
 			c.onEvictedCB(ks[i], vs[i])
