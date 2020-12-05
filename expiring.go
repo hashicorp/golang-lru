@@ -138,7 +138,6 @@ func ExpireAfterAccess(elru *ExpiringCache) error {
 }
 
 // EvictedCallback register a callback to receive expired/evicted key, values
-// Caution: do not do any blocking operations inside callback
 func EvictedCallback(cb func(k, v interface{})) OptionExp {
 	return func(elru *ExpiringCache) error {
 		elru.onEvictedCB = cb
@@ -205,10 +204,8 @@ func (elru *ExpiringCache) AddWithTTL(k, v interface{}, expiration time.Duration
 		ve = expired[0].val
 	}
 	elru.lock.Unlock()
-	if evicted {
-		if elru.onEvictedCB != nil {
-			elru.onEvictedCB(ke, ve)
-		}
+	if evicted && elru.onEvictedCB != nil {
+		elru.onEvictedCB(ke, ve)
 	}
 	return evicted
 }
