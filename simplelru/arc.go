@@ -26,7 +26,7 @@ func NewARC(size int) (*ARCLRU, error) {
 	return NewARCWithEvict(size, nil)
 }
 
-// NewARC creates an ARC of the given size
+// NewARCWithEvict creates an ARC of the given size and a callback to receive evicted values
 func NewARCWithEvict(size int, onEvict EvictCallback) (*ARCLRU, error) {
 	// Create the sub LRUs
 	b1, err := NewLRU(size, nil)

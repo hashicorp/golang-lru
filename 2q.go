@@ -28,6 +28,8 @@ func New2Q(size int) (*TwoQueueCache, error) {
 	return New2QParams(size, nil, simplelru.Default2QRecentRatio, simplelru.Default2QGhostEntries)
 }
 
+// New2QWithEvict creates a new TwoQueueCache using the default
+// values for the parameters and a callback to receive evicted values
 func New2QWithEvict(size int, onEvict func(k, v interface{})) (*TwoQueueCache, error) {
 	return New2QParams(size, onEvict, simplelru.Default2QRecentRatio, simplelru.Default2QGhostEntries)
 }
@@ -43,8 +45,8 @@ func New2QParams(size int, onEvict func(k, v interface{}), recentRatio, ghostRat
 	return
 }
 
-//evicted key/val will be saved and sent thru registered callback
-//outside of critical section later
+// evicted key/val will be saved and sent thru registered callback
+// outside of critical section later
 func (c *TwoQueueCache) onEvicted(k, v interface{}) {
 	c.evictedKey = k
 	c.evictedVal = v

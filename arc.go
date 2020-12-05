@@ -25,6 +25,8 @@ type ARCCache struct {
 func NewARC(size int) (*ARCCache, error) {
 	return NewARCWithEvict(size, nil)
 }
+
+// NewARCWithEvict creates an ARC of the given size and a callback to receive evicted values
 func NewARCWithEvict(size int, onEvict func(k, v interface{})) (c *ARCCache, err error) {
 	c = &ARCCache{onEvictedCB: onEvict}
 	if onEvict != nil {
@@ -34,7 +36,7 @@ func NewARCWithEvict(size int, onEvict func(k, v interface{})) (c *ARCCache, err
 	return
 }
 
-//evicted key/val will be buffered and sent thru callback outside of critical section
+// evicted key/val will be buffered and sent thru callback outside of critical section
 func (c *ARCCache) onEvicted(k, v interface{}) {
 	c.evictedKey = k
 	c.evictedVal = v

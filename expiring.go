@@ -233,7 +233,7 @@ func (elru *ExpiringCache) Remove(k interface{}) (ok bool) {
 	var ke, ve interface{}
 	elru.lock.Lock()
 	if ok = elru.lru.Remove(k); ok {
-		//there must be a eviction
+		// there must be a eviction
 		elru.expireList.Remove(elru.evictedEntry)
 		ke, ve = elru.evictedEntry.key, elru.evictedEntry.val
 		elru.evictedEntry = nil
@@ -334,8 +334,8 @@ func (elru *ExpiringCache) removeExpired(now time.Time, removeAllExpired bool) (
 	for i := 0; i < len(res); i++ {
 		elru.lru.Remove(res[i].key)
 	}
-	//now here we already remove them from expireList,
-	//don't need to do it again
+	// now here we already remove them from expireList,
+	// don't need to do it again
 	elru.evictedEntry = nil
 	return
 }

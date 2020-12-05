@@ -40,6 +40,8 @@ func New2Q(size int) (*TwoQueueLRU, error) {
 	return New2QParams(size, nil, Default2QRecentRatio, Default2QGhostEntries)
 }
 
+// New2QWithEvict creates a new TwoQueueLRU using the default
+// values for the parameters and a callback to receive evicted values
 func New2QWithEvict(size int, onEvict EvictCallback) (*TwoQueueLRU, error) {
 	return New2QParams(size, onEvict, Default2QRecentRatio, Default2QGhostEntries)
 }
