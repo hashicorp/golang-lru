@@ -273,7 +273,11 @@ func TestExpiringLRU_RandomOps(t *testing.T) {
 
 // Test eviction by least-recently-used (2-queue LRU suuport retaining frequently-used)
 func TestExpiring2Q_EvictionByLRU(t *testing.T) {
-	elru, err := NewExpiring2Q(3, 30*time.Second)
+	var ek, ev interface{}
+	elru, err := NewExpiring2Q(3, 30*time.Second, EvictedCallback(func(k, v interface{}) {
+		ek = k
+		ev = v
+	}))
 	if err != nil {
 		t.Fatalf("failed to create expiring LRU")
 	}
@@ -287,9 +291,8 @@ func TestExpiring2Q_EvictionByLRU(t *testing.T) {
 		elru.Get(i)
 	}
 	// next add 3,4; verify 2, 3 will be evicted
-	var ek, ev interface{}
 	for i := 3; i < 5; i++ {
-		evicted := elru.Add(i, i, &ek, &ev)
+		evicted := elru.Add(i, i)
 		k, v := ek.(int), ev.(int)
 		if !evicted || k != (i-1) || v != (i-1) {
 			t.Fatalf("(%v %v) should be evicted, but got (%v,%v)", i-1, i-1, k, v)
@@ -321,9 +324,15 @@ func (tt *testTimer) Advance(d time.Duration) { tt.t = tt.t.Add(d) }
 
 // Test eviction by ExpireAfterWrite
 func TestExpiring2Q_ExpireAfterWrite(t *testing.T) {
+	var ek, ev interface{}
 	// use test timer for expiration
 	tt := newTestTimer()
-	elru, err := NewExpiring2Q(3, 30*time.Second, TimeTicker(tt.Now))
+	elru, err := NewExpiring2Q(3, 30*time.Second, TimeTicker(tt.Now), EvictedCallback(
+		func(k, v interface{}) {
+			ek = k
+			ev = v
+		},
+	))
 	if err != nil {
 		t.Fatalf("failed to create expiring LRU")
 	}
@@ -343,9 +352,8 @@ func TestExpiring2Q_ExpireAfterWrite(t *testing.T) {
 	// so they should be evicted, although they are more recently retrieved than <2,2>
 	tt.Advance(15 * time.Second)
 	// next add 3,4; verify 0,1 will be evicted
-	var ek, ev interface{}
 	for i := 3; i < 5; i++ {
-		evicted := elru.Add(i, i, &ek, &ev)
+		evicted := elru.Add(i, i)
 		k, v := ek.(int), ev.(int)
 		if !evicted || k != (i-3) || v != (i-3) {
 			t.Fatalf("(%v %v) should be evicted, but got (%v,%v)", i-3, i-3, k, v)
@@ -410,9 +418,14 @@ func TestExpiring2Q_ExpireAfterAccess(t *testing.T) {
 
 // Test eviction by ExpireAfterWrite
 func TestExpiringARC_ExpireAfterWrite(t *testing.T) {
+	var ek, ev interface{}
 	// use test timer for expiration
 	tt := newTestTimer()
-	elru, err := NewExpiringARC(3, 30*time.Second, TimeTicker(tt.Now))
+	elru, err := NewExpiringARC(3, 30*time.Second, TimeTicker(tt.Now), EvictedCallback(
+		func(k, v interface{}) {
+			ek, ev = k, v
+		},
+	))
 	if err != nil {
 		t.Fatalf("failed to create expiring LRU")
 	}
@@ -432,9 +445,8 @@ func TestExpiringARC_ExpireAfterWrite(t *testing.T) {
 	// so they should be evicted, although they are more recently retrieved than <2,2>
 	tt.Advance(15 * time.Second)
 	// next add 3,4; verify 0,1 will be evicted
-	var ek, ev interface{}
 	for i := 3; i < 5; i++ {
-		evicted := elru.Add(i, i, &ek, &ev)
+		evicted := elru.Add(i, i)
 		k, v := ek.(int), ev.(int)
 		if !evicted || k != (i-3) || v != (i-3) {
 			t.Fatalf("(%v %v) should be evicted, but got (%v,%v)", i-3, i-3, k, v)
@@ -499,9 +511,14 @@ func TestExpiringARC_ExpireAfterAccess(t *testing.T) {
 
 // Test eviction by ExpireAfterWrite
 func TestExpiringLRU_ExpireAfterWrite(t *testing.T) {
+	var ek, ev interface{}
 	// use test timer for expiration
 	tt := newTestTimer()
-	elru, err := NewExpiringLRU(3, 30*time.Second, TimeTicker(tt.Now))
+	elru, err := NewExpiringLRU(3, 30*time.Second, TimeTicker(tt.Now), EvictedCallback(
+		func(k, v interface{}) {
+			ek, ev = k, v
+		},
+	))
 	if err != nil {
 		t.Fatalf("failed to create expiring LRU")
 	}
@@ -521,9 +538,8 @@ func TestExpiringLRU_ExpireAfterWrite(t *testing.T) {
 	// so they should be evicted, although they are more recently retrieved than <2,2>
 	tt.Advance(15 * time.Second)
 	// next add 3,4; verify 0,1 will be evicted
-	var ek, ev interface{}
 	for i := 3; i < 5; i++ {
-		evicted := elru.Add(i, i, &ek, &ev)
+		evicted := elru.Add(i, i)
 		k, v := ek.(int), ev.(int)
 		if !evicted || k != (i-3) || v != (i-3) {
 			t.Fatalf("(%v %v) should be evicted, but got (%v,%v)", i-3, i-3, k, v)

@@ -92,11 +92,7 @@ func NewExpiring2Q(size int, expir time.Duration, opts ...OptionExp) (elru *Expi
 	if elru, err = newExpiringCacheWithOptions(expir, opts); err != nil {
 		return
 	}
-	onEvicted := elru.onEvictedCB
-	if onEvicted != nil {
-		onEvicted = elru.onEvicted
-	}
-	elru.lru, err = simplelru.New2QWithEvict(size, onEvicted)
+	elru.lru, err = simplelru.New2QWithEvict(size, elru.onEvicted)
 	if err != nil {
 		return
 	}
@@ -109,11 +105,7 @@ func NewExpiringARC(size int, expir time.Duration, opts ...OptionExp) (elru *Exp
 	if elru, err = newExpiringCacheWithOptions(expir, opts); err != nil {
 		return
 	}
-	onEvicted := elru.onEvictedCB
-	if onEvicted != nil {
-		onEvicted = elru.onEvicted
-	}
-	elru.lru, err = simplelru.NewARCWithEvict(size, onEvicted)
+	elru.lru, err = simplelru.NewARCWithEvict(size, elru.onEvicted)
 	if err != nil {
 		return
 	}
@@ -126,11 +118,7 @@ func NewExpiringLRU(size int, expir time.Duration, opts ...OptionExp) (elru *Exp
 	if elru, err = newExpiringCacheWithOptions(expir, opts); err != nil {
 		return
 	}
-	onEvicted := elru.onEvictedCB
-	if onEvicted != nil {
-		onEvicted = elru.onEvicted
-	}
-	elru.lru, err = simplelru.NewLRU(size, onEvicted)
+	elru.lru, err = simplelru.NewLRU(size, elru.onEvicted)
 	if err != nil {
 		return
 	}

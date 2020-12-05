@@ -106,7 +106,7 @@ func (c *TwoQueueCache) Remove(key interface{}) (ok bool) {
 func (c *TwoQueueCache) Purge() {
 	var keys, vals []interface{}
 	c.lock.Lock()
-	if c.onEvicted != nil {
+	if c.onEvictedCB != nil {
 		keys = c.lru.Keys()
 		for _, k := range keys {
 			val, _ := c.lru.Peek(k)
@@ -115,9 +115,9 @@ func (c *TwoQueueCache) Purge() {
 	}
 	c.lru.Purge()
 	c.lock.Unlock()
-	if c.onEvicted != nil {
+	if c.onEvictedCB != nil {
 		for i := 0; i < len(keys); i++ {
-			c.onEvicted(keys[i], vals[i])
+			c.onEvictedCB(keys[i], vals[i])
 		}
 	}
 }
