@@ -1,11 +1,14 @@
 // Package simplelru provides simple LRU implementation based on build-in container/list.
 package simplelru
 
+// EvictCallback is used to get a callback when a cache entry is evicted
+type EvictCallback func(key interface{}, value interface{})
+
 // LRUCache is the interface for simple LRU cache.
 type LRUCache interface {
-	// Adds a value to the cache, returns true if an eviction occurred
-	// return evicted key/val and updates the "recently used"-ness of the key.
-	Add(key, value interface{}, evictedKeyVal ...*interface{}) bool
+	// Adds a value to the cache, returns true if an eviction occurred and
+	// updates the "recently used"-ness of the key.
+	Add(key, value interface{}) bool
 
 	// Returns key's value from the cache and
 	// updates the "recently used"-ness of the key. #value, isFound
@@ -36,5 +39,5 @@ type LRUCache interface {
 	Purge()
 
 	// Resizes cache, returning number evicted
-	Resize(size int) int
+	Resize(int) int
 }

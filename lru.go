@@ -8,8 +8,10 @@ import (
 
 // Cache is a thread-safe fixed size LRU cache.
 type Cache struct {
-	lru  *simplelru.LRU
-	lock sync.RWMutex
+	lru                      *simplelru.LRU
+	evictedKeys, evictedVals []interface{}
+	onEvictedCB              func(k, v interface{})
+	lock                     sync.RWMutex
 }
 
 // New creates an LRU of the given size.
@@ -19,16 +21,31 @@ func New(size int) (*Cache, error) {
 
 // NewWithEvict constructs a fixed size cache with the given eviction
 // callback.
-func NewWithEvict(size int, onEvicted func(key interface{}, value interface{})) (*Cache, error) {
+func NewWithEvict(size int, onEvicted func(key, value interface{})) (c *Cache, err error) {
 	// create a cache with default settings
-	lru, err := simplelru.NewLRU(size, simplelru.EvictCallback(onEvicted))
-	if err != nil {
-		return nil, err
+	c = &Cache{onEvictedCB: onEvicted}
+	if onEvicted != nil {
+		onEvicted = c.onEvicted
 	}
-	c := &Cache{
-		lru: lru,
+	c.lru, err = simplelru.NewLRU(size, onEvicted)
+	return
+}
+
+//evicted key/val will be buffered and sent in callback outside of critical section
+func (c *Cache) onEvicted(k, v interface{}) {
+	c.evictedKeys = append(c.evictedKeys, k)
+	c.evictedVals = append(c.evictedVals, v)
+}
+
+//invoke callback outside of critical section to avoid dead-lock
+func (c *Cache) sendEvicted() {
+	if c.onEvictedCB != nil {
+		for i := 0; i < len(c.evictedKeys); i++ {
+			c.onEvictedCB(c.evictedKeys[i], c.evictedVals[i])
+		}
+		c.evictedKeys = nil
+		c.evictedVals = nil
 	}
-	return c, nil
 }
 
 // Purge is used to completely clear the cache.
@@ -36,14 +53,17 @@ func (c *Cache) Purge() {
 	c.lock.Lock()
 	c.lru.Purge()
 	c.lock.Unlock()
+	//invoke callback outside of critical section
+	c.sendEvicted()
 }
 
-// Add adds a value to the cache. Returns true and evicted key/val if an eviction occurred.
-func (c *Cache) Add(key, value interface{}, evictedKeyVal ...*interface{}) (evicted bool) {
+// Add adds a value to the cache. Returns true if an eviction occurred.
+func (c *Cache) Add(key, value interface{}) (evicted bool) {
 	c.lock.Lock()
-	evicted = c.lru.Add(key, value, evictedKeyVal...)
+	evicted = c.lru.Add(key, value)
 	c.lock.Unlock()
-	return evicted
+	c.sendEvicted()
+	return
 }
 
 // Get looks up a key's value from the cache.
@@ -77,12 +97,13 @@ func (c *Cache) Peek(key interface{}) (value interface{}, ok bool) {
 // Returns whether found and whether an eviction occurred.
 func (c *Cache) ContainsOrAdd(key, value interface{}) (ok, evicted bool) {
 	c.lock.Lock()
-	defer c.lock.Unlock()
-
 	if c.lru.Contains(key) {
+		c.lock.Unlock()
 		return true, false
 	}
 	evicted = c.lru.Add(key, value)
+	c.lock.Unlock()
+	c.sendEvicted()
 	return false, evicted
 }
 
@@ -91,14 +112,14 @@ func (c *Cache) ContainsOrAdd(key, value interface{}) (ok, evicted bool) {
 // Returns whether found and whether an eviction occurred.
 func (c *Cache) PeekOrAdd(key, value interface{}) (previous interface{}, ok, evicted bool) {
 	c.lock.Lock()
-	defer c.lock.Unlock()
-
 	previous, ok = c.lru.Peek(key)
 	if ok {
+		c.lock.Unlock()
 		return previous, true, false
 	}
-
 	evicted = c.lru.Add(key, value)
+	c.lock.Unlock()
+	c.sendEvicted()
 	return nil, false, evicted
 }
 
@@ -107,6 +128,7 @@ func (c *Cache) Remove(key interface{}) (present bool) {
 	c.lock.Lock()
 	present = c.lru.Remove(key)
 	c.lock.Unlock()
+	c.sendEvicted()
 	return
 }
 
@@ -115,6 +137,7 @@ func (c *Cache) Resize(size int) (evicted int) {
 	c.lock.Lock()
 	evicted = c.lru.Resize(size)
 	c.lock.Unlock()
+	c.sendEvicted()
 	return evicted
 }
 
@@ -123,14 +146,15 @@ func (c *Cache) RemoveOldest() (key, value interface{}, ok bool) {
 	c.lock.Lock()
 	key, value, ok = c.lru.RemoveOldest()
 	c.lock.Unlock()
+	c.sendEvicted()
 	return
 }
 
 // GetOldest returns the oldest entry
 func (c *Cache) GetOldest() (key, value interface{}, ok bool) {
-	c.lock.Lock()
+	c.lock.RLock()
 	key, value, ok = c.lru.GetOldest()
-	c.lock.Unlock()
+	c.lock.RUnlock()
 	return
 }
 

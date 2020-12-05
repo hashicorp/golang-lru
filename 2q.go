@@ -16,26 +16,46 @@ import (
 // head. The ARCCache is similar, but does not require setting any
 // parameters.
 type TwoQueueCache struct {
-	lru  *simplelru.TwoQueueLRU
-	lock sync.RWMutex
+	lru                    *simplelru.TwoQueueLRU
+	evictedKey, evictedVal interface{}
+	onEvictedCB            func(k, v interface{})
+	lock                   sync.RWMutex
 }
 
 // New2Q creates a new TwoQueueCache using the default
 // values for the parameters.
 func New2Q(size int) (*TwoQueueCache, error) {
-	return New2QParams(size, simplelru.Default2QRecentRatio, simplelru.Default2QGhostEntries)
+	return New2QParams(size, nil, simplelru.Default2QRecentRatio, simplelru.Default2QGhostEntries)
+}
+
+func New2QWithEvict(size int, onEvict func(k, v interface{})) (*TwoQueueCache, error) {
+	return New2QParams(size, onEvict, simplelru.Default2QRecentRatio, simplelru.Default2QGhostEntries)
 }
 
 // New2QParams creates a new TwoQueueCache using the provided
 // parameter values.
-func New2QParams(size int, recentRatio, ghostRatio float64) (*TwoQueueCache, error) {
-	lru, err := simplelru.New2QParams(size, recentRatio, ghostRatio)
-	if err != nil {
-		return nil, err
+func New2QParams(size int, onEvict func(k, v interface{}), recentRatio, ghostRatio float64) (c *TwoQueueCache, err error) {
+	c = &TwoQueueCache{onEvictedCB: onEvict}
+	if onEvict != nil {
+		onEvict = c.onEvicted
 	}
-	return &TwoQueueCache{
-		lru: lru,
-	}, nil
+	c.lru, err = simplelru.New2QParams(size, onEvict, recentRatio, ghostRatio)
+	return
+}
+
+//evicted key/val will be buffered and sent thru callback outside of critical section
+func (c *TwoQueueCache) onEvicted(k, v interface{}) {
+	c.evictedKey = k
+	c.evictedVal = v
+}
+
+//invoke callback outside of critical section to avoid dead-lock
+func (c *TwoQueueCache) sendEvicted() {
+	if c.onEvictedCB != nil {
+		c.onEvictedCB(c.evictedKey, c.evictedVal)
+		c.evictedKey = nil
+		c.evictedVal = nil
+	}
 }
 
 // Get looks up a key's value from the cache.
@@ -45,11 +65,13 @@ func (c *TwoQueueCache) Get(key interface{}) (value interface{}, ok bool) {
 	return c.lru.Get(key)
 }
 
-// Add adds a value to the cache, return evicted key/val if eviction happens.
-func (c *TwoQueueCache) Add(key, value interface{}, evictedKeyVal ...*interface{}) (evicted bool) {
+// Add adds a value to the cache, return true if eviction happens.
+func (c *TwoQueueCache) Add(key, value interface{}) (evicted bool) {
 	c.lock.Lock()
-	defer c.lock.Unlock()
-	return c.lru.Add(key, value, evictedKeyVal...)
+	evicted = c.lru.Add(key, value)
+	c.lock.Unlock()
+	c.sendEvicted()
+	return
 }
 
 // Len returns the number of items in the cache.
@@ -68,17 +90,32 @@ func (c *TwoQueueCache) Keys() []interface{} {
 }
 
 // Remove removes the provided key from the cache.
-func (c *TwoQueueCache) Remove(key interface{}) bool {
+func (c *TwoQueueCache) Remove(key interface{}) (ok bool) {
 	c.lock.Lock()
-	defer c.lock.Unlock()
-	return c.lru.Remove(key)
+	ok = c.lru.Remove(key)
+	c.lock.Unlock()
+	c.sendEvicted()
+	return
 }
 
 // Purge is used to completely clear the cache.
 func (c *TwoQueueCache) Purge() {
+	var keys, vals []interface{}
 	c.lock.Lock()
-	defer c.lock.Unlock()
+	if c.onEvicted != nil {
+		keys = c.lru.Keys()
+		for _, k := range keys {
+			val, _ := c.lru.Peek(k)
+			vals = append(vals, val)
+		}
+	}
 	c.lru.Purge()
+	c.lock.Unlock()
+	if c.onEvicted != nil {
+		for i := 0; i < len(keys); i++ {
+			c.onEvicted(keys[i], vals[i])
+		}
+	}
 }
 
 // Contains is used to check if the cache contains a key

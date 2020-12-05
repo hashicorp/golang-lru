@@ -11,9 +11,9 @@ import (
 
 // common interface shared by 2q, arc and simple LRU, used as interface of backing LRU
 type lruCache interface {
-	// Adds a value to the cache, returns evicted <k,v> if happened and
+	// Adds a value to the cache, returns true if happened and
 	// updates the "recently used"-ness of the key.
-	Add(k, v interface{}, evictedKeyVal ...*interface{}) (evicted bool)
+	Add(k, v interface{}) (evicted bool)
 	// Returns key's value from the cache if found and
 	// updates the "recently used"-ness of the key.
 	Get(k interface{}) (v interface{}, ok bool)
@@ -55,10 +55,12 @@ const (
 // expireAfterAccess and expireAfterWrite (default)
 // Internally keep a expireList sorted by entries' expirationTime
 type ExpiringCache struct {
-	lru        lruCache
-	expiration time.Duration
-	expireList *expireList
-	expireType expiringType
+	lru          lruCache
+	expiration   time.Duration
+	expireList   *expireList
+	expireType   expiringType
+	evictedEntry *entry
+	onEvictedCB  func(k, v interface{})
 	// placeholder for time.Now() for easier testing setup
 	timeNow func() time.Time
 	lock    sync.RWMutex
@@ -70,54 +72,70 @@ type OptionExp func(c *ExpiringCache) error
 // NewExpiring2Q creates an expiring cache with specifized
 // size and entries lifetime duration, backed by a 2-queue LRU
 func NewExpiring2Q(size int, expir time.Duration, opts ...OptionExp) (elru *ExpiringCache, err error) {
-	lru, err := simplelru.New2Q(size)
+	// create expiring cache with default settings
+	elru = &ExpiringCache{
+		expiration: expir,
+		expireList: newExpireList(),
+		expireType: expireAfterWrite,
+		timeNow:    time.Now,
+	}
+	elru.lru, err = simplelru.New2QWithEvict(size, elru.onEvicted)
 	if err != nil {
 		return
 	}
-	elru, err = Expiring(expir, lru, opts...)
+	// apply options to customize
+	for _, opt := range opts {
+		if err = opt(elru); err != nil {
+			return
+		}
+	}
 	return
 }
 
 // NewExpiringARC creates an expiring cache with specifized
 // size and entries lifetime duration, backed by a ARC LRU
 func NewExpiringARC(size int, expir time.Duration, opts ...OptionExp) (elru *ExpiringCache, err error) {
-	lru, err := simplelru.NewARC(size)
+	// create expiring cache with default settings
+	elru = &ExpiringCache{
+		expiration: expir,
+		expireList: newExpireList(),
+		expireType: expireAfterWrite,
+		timeNow:    time.Now,
+	}
+	elru.lru, err = simplelru.NewARCWithEvict(size, elru.onEvicted)
 	if err != nil {
 		return
 	}
-	elru, err = Expiring(expir, lru, opts...)
+	// apply options to customize
+	for _, opt := range opts {
+		if err = opt(elru); err != nil {
+			return
+		}
+	}
 	return
 }
 
 // NewExpiringLRU creates an expiring cache with specifized
 // size and entries lifetime duration, backed by a simple LRU
 func NewExpiringLRU(size int, expir time.Duration, opts ...OptionExp) (elru *ExpiringCache, err error) {
-	lru, err := simplelru.NewLRU(size, nil)
-	if err != nil {
-		return
-	}
-	elru, err = Expiring(expir, lru, opts...)
-	return
-}
-
-// Expiring will wrap an existing LRU to make its entries
-// expiring with specified duration
-func Expiring(expir time.Duration, lru lruCache, opts ...OptionExp) (*ExpiringCache, error) {
 	// create expiring cache with default settings
-	elru := &ExpiringCache{
-		lru:        lru,
+	elru = &ExpiringCache{
 		expiration: expir,
 		expireList: newExpireList(),
 		expireType: expireAfterWrite,
 		timeNow:    time.Now,
 	}
+	elru.lru, err = simplelru.NewLRU(size, elru.onEvicted)
+	if err != nil {
+		return
+	}
 	// apply options to customize
 	for _, opt := range opts {
-		if err := opt(elru); err != nil {
-			return nil, err
+		if err = opt(elru); err != nil {
+			return
 		}
 	}
-	return elru, nil
+	return
 }
 
 // ExpireAfterWrite sets expiring policy
@@ -132,6 +150,15 @@ func ExpireAfterAccess(elru *ExpiringCache) error {
 	return nil
 }
 
+// EvictedCallback register a callback to receive expired/evicted key, values
+// Caution: do not do any blocking operations inside callback
+func EvictedCallback(cb func(k, v interface{})) OptionExp {
+	return func(elru *ExpiringCache) error {
+		elru.onEvictedCB = cb
+		return nil
+	}
+}
+
 // TimeTicker sets the function used to return current time, for test setup
 func TimeTicker(tn func() time.Time) OptionExp {
 	return func(elru *ExpiringCache) error {
@@ -140,19 +167,22 @@ func TimeTicker(tn func() time.Time) OptionExp {
 	}
 }
 
+func (elru *ExpiringCache) onEvicted(k, v interface{}) {
+	elru.evictedEntry = v.(*entry)
+}
+
 // Add add a key/val pair to cache with cache's default expiration duration
-// return evicted key/val pair if eviction happens.
+// return true if eviction happens.
 // Should be used in most cases for better performance
-func (elru *ExpiringCache) Add(k, v interface{}, evictedKeyVal ...*interface{}) (evicted bool) {
-	return elru.AddWithTTL(k, v, elru.expiration, evictedKeyVal...)
+func (elru *ExpiringCache) Add(k, v interface{}) (evicted bool) {
+	return elru.AddWithTTL(k, v, elru.expiration)
 }
 
 // AddWithTTL add a key/val pair to cache with provided expiration duration
-// return evicted key/val pair if eviction happens.
+// return true if eviction happens.
 // Using this with variant expiration durations could cause degraded performance
-func (elru *ExpiringCache) AddWithTTL(k, v interface{}, expiration time.Duration, evictedKeyVal ...*interface{}) (evicted bool) {
+func (elru *ExpiringCache) AddWithTTL(k, v interface{}, expiration time.Duration) (evicted bool) {
 	elru.lock.Lock()
-	defer elru.lock.Unlock()
 	now := elru.timeNow()
 	var ent *entry
 	var expired []*entry
@@ -174,23 +204,23 @@ func (elru *ExpiringCache) AddWithTTL(k, v interface{}, expiration time.Duration
 		elru.expireList.PushFront(ent)
 	}
 	// Add/Update cache entry in backing cache
-	var evictedKey, evictedVal interface{}
-	evicted = elru.lru.Add(k, ent, &evictedKey, &evictedVal)
+	evicted = elru.lru.Add(k, ent)
 	// remove evicted ent from expireList
+	var ke, ve interface{}
 	if evicted {
-		ent = evictedVal.(*entry)
-		evictedVal = ent.val
-		elru.expireList.Remove(ent)
+		ke, ve = elru.evictedEntry.key, elru.evictedEntry.val
+		elru.expireList.Remove(elru.evictedEntry)
+		elru.evictedEntry = nil
 	} else if len(expired) > 0 {
-		evictedKey = expired[0].key
-		evictedVal = expired[0].val
 		evicted = true
+		ke = expired[0].key
+		ve = expired[0].val
 	}
-	if evicted && len(evictedKeyVal) > 0 {
-		*evictedKeyVal[0] = evictedKey
-	}
-	if evicted && len(evictedKeyVal) > 1 {
-		*evictedKeyVal[1] = evictedVal
+	elru.lock.Unlock()
+	if evicted {
+		if elru.onEvictedCB != nil {
+			elru.onEvictedCB(ke, ve)
+		}
 	}
 	return evicted
 }
@@ -214,14 +244,15 @@ func (elru *ExpiringCache) Get(k interface{}) (v interface{}, ok bool) {
 }
 
 // Remove removes a key from the cache
-func (elru *ExpiringCache) Remove(k interface{}) bool {
+func (elru *ExpiringCache) Remove(k interface{}) (ok bool) {
 	elru.lock.Lock()
 	defer elru.lock.Unlock()
-	if ent, _ := elru.lru.Peek(k); ent != nil {
-		elru.expireList.Remove(ent.(*entry))
-		return elru.lru.Remove(k)
+	if ok = elru.lru.Remove(k); ok {
+		//there must be a eviction
+		elru.expireList.Remove(elru.evictedEntry)
+		elru.evictedEntry = nil
 	}
-	return false
+	return
 }
 
 // Peek return key's value without updating the "recently used"-ness of the key.
@@ -250,39 +281,59 @@ func (elru *ExpiringCache) Contains(k interface{}) bool {
 // The frequently used keys are first in the returned slice.
 func (elru *ExpiringCache) Keys() []interface{} {
 	elru.lock.Lock()
-	defer elru.lock.Unlock()
 	// to get accurate key set, remove all expired
-	elru.removeExpired(elru.timeNow(), true)
+	ents := elru.removeExpired(elru.timeNow(), true)
+	elru.lock.Unlock()
+	if elru.onEvictedCB != nil {
+		for _, ent := range ents {
+			elru.onEvictedCB(ent.key, ent.val)
+		}
+	}
 	return elru.lru.Keys()
 }
 
 // Len returns the number of items in the cache.
 func (elru *ExpiringCache) Len() int {
 	elru.lock.Lock()
-	defer elru.lock.Unlock()
 	// to get accurate size, remove all expired
-	elru.removeExpired(elru.timeNow(), true)
+	ents := elru.removeExpired(elru.timeNow(), true)
+	elru.lock.Unlock()
+	if elru.onEvictedCB != nil {
+		for _, ent := range ents {
+			elru.onEvictedCB(ent.key, ent.val)
+		}
+	}
 	return elru.lru.Len()
 }
 
 // Purge is used to completely clear the cache.
 func (elru *ExpiringCache) Purge() {
+	var ents []*entry
 	elru.lock.Lock()
-	defer elru.lock.Unlock()
-	elru.expireList.Init()
+	if elru.onEvictedCB != nil {
+		ents = elru.expireList.AllEntries()
+	}
 	elru.lru.Purge()
+	elru.evictedEntry = nil
+	elru.expireList.Init()
+	elru.lock.Unlock()
+	if elru.onEvictedCB != nil {
+		for _, ent := range ents {
+			elru.onEvictedCB(ent.key, ent.val)
+		}
+	}
 }
 
 // RemoveAllExpired remove all expired entries, can be called by cleanup goroutine
-func (elru *ExpiringCache) RemoveAllExpired() (keys []interface{}, vals []interface{}) {
+func (elru *ExpiringCache) RemoveAllExpired() {
 	elru.lock.Lock()
-	defer elru.lock.Unlock()
 	ents := elru.removeExpired(elru.timeNow(), true)
-	for _, ent := range ents {
-		keys = append(keys, ent.key)
-		vals = append(vals, ent.val)
+	elru.lock.Unlock()
+	if elru.onEvictedCB != nil {
+		for _, ent := range ents {
+			elru.onEvictedCB(ent.key, ent.val)
+		}
 	}
-	return
 }
 
 // either remove one (the oldest expired), or all expired
@@ -291,6 +342,9 @@ func (elru *ExpiringCache) removeExpired(now time.Time, removeAllExpired bool) (
 	for i := 0; i < len(res); i++ {
 		elru.lru.Remove(res[i].key)
 	}
+	//now here we already remove them from expireList,
+	//don't need to do it again
+	elru.evictedEntry = nil
 	return
 }
 
@@ -331,6 +385,13 @@ func (el *expireList) MoveToFront(ent *entry) {
 		}
 	}
 	el.expList.MoveAfter(ent.elem, el.expList.Back())
+}
+
+func (el *expireList) AllEntries() (res []*entry) {
+	for e := el.expList.Front(); e != nil; e = e.Next() {
+		res = append(res, e.Value.(*entry))
+	}
+	return
 }
 
 func (el *expireList) Remove(ent *entry) interface{} {

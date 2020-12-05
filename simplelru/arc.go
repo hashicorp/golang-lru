@@ -17,10 +17,17 @@ type ARCLRU struct {
 
 	t2 LRUCache // T2 is the LRU for frequently accessed items
 	b2 LRUCache // B2 is the LRU for evictions from t2
+
+	onEvicted EvictCallback
 }
 
 // NewARC creates an ARC of the given size
 func NewARC(size int) (*ARCLRU, error) {
+	return NewARCWithEvict(size, nil)
+}
+
+// NewARC creates an ARC of the given size
+func NewARCWithEvict(size int, onEvict EvictCallback) (*ARCLRU, error) {
 	// Create the sub LRUs
 	b1, err := NewLRU(size, nil)
 	if err != nil {
@@ -41,12 +48,13 @@ func NewARC(size int) (*ARCLRU, error) {
 
 	// Initialize the ARC
 	c := &ARCLRU{
-		size: size,
-		p:    0,
-		t1:   t1,
-		b1:   b1,
-		t2:   t2,
-		b2:   b2,
+		size:      size,
+		p:         0,
+		t1:        t1,
+		b1:        b1,
+		t2:        t2,
+		b2:        b2,
+		onEvicted: onEvict,
 	}
 	return c, nil
 }
@@ -71,7 +79,7 @@ func (c *ARCLRU) Get(key interface{}) (value interface{}, ok bool) {
 }
 
 // Add adds a value to the cache, return evicted key/val if it happens.
-func (c *ARCLRU) Add(key, value interface{}, evictedKeyVal ...*interface{}) (evicted bool) {
+func (c *ARCLRU) Add(key, value interface{}) (evicted bool) {
 	// Check if the value is contained in T1 (recent), and potentially
 	// promote it to frequent T2
 	if c.t1.Contains(key) {
@@ -159,11 +167,8 @@ func (c *ARCLRU) Add(key, value interface{}, evictedKeyVal ...*interface{}) (evi
 		// Add to the recently seen list
 		c.t1.Add(key, value)
 	}
-	if evicted && len(evictedKeyVal) > 0 {
-		*evictedKeyVal[0] = evictedKey
-	}
-	if evicted && len(evictedKeyVal) > 1 {
-		*evictedKeyVal[1] = evictedValue
+	if evicted && c.onEvicted != nil {
+		c.onEvicted(evictedKey, evictedValue)
 	}
 	return evicted
 }
@@ -199,24 +204,37 @@ func (c *ARCLRU) Keys() []interface{} {
 }
 
 // Remove is used to purge a key from the cache
-func (c *ARCLRU) Remove(key interface{}) bool {
-	if c.t1.Remove(key) {
-		return true
+func (c *ARCLRU) Remove(key interface{}) (ok bool) {
+	var val interface{}
+	if val, ok = c.t1.Peek(key); ok {
+		c.t1.Remove(key)
+	} else if val, ok = c.t2.Peek(key); ok {
+		c.t2.Remove(key)
 	}
-	if c.t2.Remove(key) {
-		return true
+	if ok {
+		if c.onEvicted != nil {
+			c.onEvicted(key, val)
+		}
+	} else {
+		if !c.b1.Remove(key) {
+			c.b2.Remove(key)
+		}
 	}
-	if c.b1.Remove(key) {
-		return false
-	}
-	if c.b2.Remove(key) {
-		return false
-	}
-	return false
+	return
 }
 
 // Purge is used to clear the cache
 func (c *ARCLRU) Purge() {
+	if c.onEvicted != nil {
+		for _, k := range c.t1.Keys() {
+			v, _ := c.t1.Peek(k)
+			c.onEvicted(k, v)
+		}
+		for _, k := range c.t2.Keys() {
+			v, _ := c.t2.Peek(k)
+			c.onEvicted(k, v)
+		}
+	}
 	c.t1.Purge()
 	c.t2.Purge()
 	c.b1.Purge()
