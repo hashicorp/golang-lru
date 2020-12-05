@@ -66,12 +66,10 @@ type ExpiringCache struct {
 	lock    sync.RWMutex
 }
 
-// OptionExp defines option to customize ExpiringCache
+// OptionExp defines options to customize ExpiringCache
 type OptionExp func(c *ExpiringCache) error
 
-// NewExpiring2Q creates an expiring cache with specifized
-// size and entries lifetime duration, backed by a 2-queue LRU
-func NewExpiring2Q(size int, expir time.Duration, opts ...OptionExp) (elru *ExpiringCache, err error) {
+func newExpiringCacheWithOptions(expir time.Duration, opts []OptionExp) (elru *ExpiringCache, err error) {
 	// create expiring cache with default settings
 	elru = &ExpiringCache{
 		expiration: expir,
@@ -79,15 +77,28 @@ func NewExpiring2Q(size int, expir time.Duration, opts ...OptionExp) (elru *Expi
 		expireType: expireAfterWrite,
 		timeNow:    time.Now,
 	}
-	elru.lru, err = simplelru.New2QWithEvict(size, elru.onEvicted)
-	if err != nil {
-		return
-	}
 	// apply options to customize
 	for _, opt := range opts {
 		if err = opt(elru); err != nil {
 			return
 		}
+	}
+	return
+}
+
+// NewExpiring2Q creates an expiring cache with specifized
+// size and entries lifetime duration, backed by a 2-queue LRU
+func NewExpiring2Q(size int, expir time.Duration, opts ...OptionExp) (elru *ExpiringCache, err error) {
+	if elru, err = newExpiringCacheWithOptions(expir, opts); err != nil {
+		return
+	}
+	onEvicted := elru.onEvictedCB
+	if onEvicted != nil {
+		onEvicted = elru.onEvicted
+	}
+	elru.lru, err = simplelru.New2QWithEvict(size, onEvicted)
+	if err != nil {
+		return
 	}
 	return
 }
@@ -95,22 +106,16 @@ func NewExpiring2Q(size int, expir time.Duration, opts ...OptionExp) (elru *Expi
 // NewExpiringARC creates an expiring cache with specifized
 // size and entries lifetime duration, backed by a ARC LRU
 func NewExpiringARC(size int, expir time.Duration, opts ...OptionExp) (elru *ExpiringCache, err error) {
-	// create expiring cache with default settings
-	elru = &ExpiringCache{
-		expiration: expir,
-		expireList: newExpireList(),
-		expireType: expireAfterWrite,
-		timeNow:    time.Now,
-	}
-	elru.lru, err = simplelru.NewARCWithEvict(size, elru.onEvicted)
-	if err != nil {
+	if elru, err = newExpiringCacheWithOptions(expir, opts); err != nil {
 		return
 	}
-	// apply options to customize
-	for _, opt := range opts {
-		if err = opt(elru); err != nil {
-			return
-		}
+	onEvicted := elru.onEvictedCB
+	if onEvicted != nil {
+		onEvicted = elru.onEvicted
+	}
+	elru.lru, err = simplelru.NewARCWithEvict(size, onEvicted)
+	if err != nil {
+		return
 	}
 	return
 }
@@ -118,22 +123,16 @@ func NewExpiringARC(size int, expir time.Duration, opts ...OptionExp) (elru *Exp
 // NewExpiringLRU creates an expiring cache with specifized
 // size and entries lifetime duration, backed by a simple LRU
 func NewExpiringLRU(size int, expir time.Duration, opts ...OptionExp) (elru *ExpiringCache, err error) {
-	// create expiring cache with default settings
-	elru = &ExpiringCache{
-		expiration: expir,
-		expireList: newExpireList(),
-		expireType: expireAfterWrite,
-		timeNow:    time.Now,
-	}
-	elru.lru, err = simplelru.NewLRU(size, elru.onEvicted)
-	if err != nil {
+	if elru, err = newExpiringCacheWithOptions(expir, opts); err != nil {
 		return
 	}
-	// apply options to customize
-	for _, opt := range opts {
-		if err = opt(elru); err != nil {
-			return
-		}
+	onEvicted := elru.onEvictedCB
+	if onEvicted != nil {
+		onEvicted = elru.onEvicted
+	}
+	elru.lru, err = simplelru.NewLRU(size, onEvicted)
+	if err != nil {
+		return
 	}
 	return
 }
@@ -167,6 +166,7 @@ func TimeTicker(tn func() time.Time) OptionExp {
 	}
 }
 
+// buffer evicted key/val to be sent on registered callback
 func (elru *ExpiringCache) onEvicted(k, v interface{}) {
 	elru.evictedEntry = v.(*entry)
 }
@@ -205,9 +205,9 @@ func (elru *ExpiringCache) AddWithTTL(k, v interface{}, expiration time.Duration
 	}
 	// Add/Update cache entry in backing cache
 	evicted = elru.lru.Add(k, ent)
-	// remove evicted ent from expireList
 	var ke, ve interface{}
 	if evicted {
+		// remove evicted ent from expireList
 		ke, ve = elru.evictedEntry.key, elru.evictedEntry.val
 		elru.expireList.Remove(elru.evictedEntry)
 		elru.evictedEntry = nil
@@ -245,12 +245,17 @@ func (elru *ExpiringCache) Get(k interface{}) (v interface{}, ok bool) {
 
 // Remove removes a key from the cache
 func (elru *ExpiringCache) Remove(k interface{}) (ok bool) {
+	var ke, ve interface{}
 	elru.lock.Lock()
-	defer elru.lock.Unlock()
 	if ok = elru.lru.Remove(k); ok {
 		//there must be a eviction
 		elru.expireList.Remove(elru.evictedEntry)
+		ke, ve = elru.evictedEntry.key, elru.evictedEntry.val
 		elru.evictedEntry = nil
+	}
+	elru.lock.Unlock()
+	if ok && elru.onEvictedCB != nil {
+		elru.onEvictedCB(ke, ve)
 	}
 	return
 }
@@ -279,31 +284,33 @@ func (elru *ExpiringCache) Contains(k interface{}) bool {
 
 // Keys returns a slice of the keys in the cache.
 // The frequently used keys are first in the returned slice.
-func (elru *ExpiringCache) Keys() []interface{} {
+func (elru *ExpiringCache) Keys() (res []interface{}) {
 	elru.lock.Lock()
 	// to get accurate key set, remove all expired
 	ents := elru.removeExpired(elru.timeNow(), true)
+	res = elru.lru.Keys()
 	elru.lock.Unlock()
 	if elru.onEvictedCB != nil {
 		for _, ent := range ents {
 			elru.onEvictedCB(ent.key, ent.val)
 		}
 	}
-	return elru.lru.Keys()
+	return
 }
 
 // Len returns the number of items in the cache.
-func (elru *ExpiringCache) Len() int {
+func (elru *ExpiringCache) Len() (sz int) {
 	elru.lock.Lock()
 	// to get accurate size, remove all expired
 	ents := elru.removeExpired(elru.timeNow(), true)
+	sz = elru.lru.Len()
 	elru.lock.Unlock()
 	if elru.onEvictedCB != nil {
 		for _, ent := range ents {
 			elru.onEvictedCB(ent.key, ent.val)
 		}
 	}
-	return elru.lru.Len()
+	return
 }
 
 // Purge is used to completely clear the cache.

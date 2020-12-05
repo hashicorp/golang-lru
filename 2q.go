@@ -43,19 +43,11 @@ func New2QParams(size int, onEvict func(k, v interface{}), recentRatio, ghostRat
 	return
 }
 
-//evicted key/val will be buffered and sent thru callback outside of critical section
+//evicted key/val will be saved and sent thru registered callback
+//outside of critical section later
 func (c *TwoQueueCache) onEvicted(k, v interface{}) {
 	c.evictedKey = k
 	c.evictedVal = v
-}
-
-//invoke callback outside of critical section to avoid dead-lock
-func (c *TwoQueueCache) sendEvicted() {
-	if c.onEvictedCB != nil {
-		c.onEvictedCB(c.evictedKey, c.evictedVal)
-		c.evictedKey = nil
-		c.evictedVal = nil
-	}
 }
 
 // Get looks up a key's value from the cache.
@@ -67,10 +59,16 @@ func (c *TwoQueueCache) Get(key interface{}) (value interface{}, ok bool) {
 
 // Add adds a value to the cache, return true if eviction happens.
 func (c *TwoQueueCache) Add(key, value interface{}) (evicted bool) {
+	var ke, ve interface{}
 	c.lock.Lock()
 	evicted = c.lru.Add(key, value)
+	ke, ve = c.evictedKey, c.evictedVal
+	c.evictedKey = nil
+	c.evictedVal = nil
 	c.lock.Unlock()
-	c.sendEvicted()
+	if evicted && c.onEvictedCB != nil {
+		c.onEvictedCB(ke, ve)
+	}
 	return
 }
 
@@ -91,10 +89,16 @@ func (c *TwoQueueCache) Keys() []interface{} {
 
 // Remove removes the provided key from the cache.
 func (c *TwoQueueCache) Remove(key interface{}) (ok bool) {
+	var ke, ve interface{}
 	c.lock.Lock()
 	ok = c.lru.Remove(key)
+	ke, ve = c.evictedKey, c.evictedVal
+	c.evictedKey = nil
+	c.evictedVal = nil
 	c.lock.Unlock()
-	c.sendEvicted()
+	if ok && c.onEvictedCB != nil {
+		c.onEvictedCB(ke, ve)
+	}
 	return
 }
 

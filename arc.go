@@ -40,15 +40,6 @@ func (c *ARCCache) onEvicted(k, v interface{}) {
 	c.evictedVal = v
 }
 
-//invoke callback outside of critical section to avoid dead-lock
-func (c *ARCCache) sendEvicted() {
-	if c.onEvictedCB != nil {
-		c.onEvictedCB(c.evictedKey, c.evictedVal)
-		c.evictedKey = nil
-		c.evictedVal = nil
-	}
-}
-
 // Get looks up a key's value from the cache.
 func (c *ARCCache) Get(key interface{}) (value interface{}, ok bool) {
 	c.lock.Lock()
@@ -58,10 +49,16 @@ func (c *ARCCache) Get(key interface{}) (value interface{}, ok bool) {
 
 // Add adds a value to the cache, return evicted key/val if it happens.
 func (c *ARCCache) Add(key, value interface{}) (evicted bool) {
+	var ke, ve interface{}
 	c.lock.Lock()
 	evicted = c.lru.Add(key, value)
+	ke, ve = c.evictedKey, c.evictedVal
+	c.evictedKey = nil
+	c.evictedVal = nil
 	c.lock.Unlock()
-	c.sendEvicted()
+	if evicted && c.onEvictedCB != nil {
+		c.onEvictedCB(ke, ve)
+	}
 	return
 }
 
@@ -81,10 +78,16 @@ func (c *ARCCache) Keys() []interface{} {
 
 // Remove is used to purge a key from the cache
 func (c *ARCCache) Remove(key interface{}) (ok bool) {
+	var ke, ve interface{}
 	c.lock.Lock()
 	ok = c.lru.Remove(key)
+	ke, ve = c.evictedKey, c.evictedVal
+	c.evictedKey = nil
+	c.evictedVal = nil
 	c.lock.Unlock()
-	c.sendEvicted()
+	if ok && c.onEvictedCB != nil {
+		c.onEvictedCB(ke, ve)
+	}
 	return
 }
 
