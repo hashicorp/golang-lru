@@ -47,13 +47,20 @@ func (c *LRU) Purge() {
 	c.evictList.Init()
 }
 
-// Add adds a value to the cache.  Returns true if an eviction occurred.
+// Add adds a value to the cache. Returns true if an eviction occurred.
 func (c *LRU) Add(key, value interface{}) (evicted bool) {
+	_, _, evicted = c.GetAndAdd(key, value)
+	return
+}
+
+// GetAndAdd returns the previous key's value from the cache and adds a new one.
+func (c *LRU) GetAndAdd(key, value interface{}) (previous interface{}, ok, evicted bool) {
 	// Check for existing item
 	if ent, ok := c.items[key]; ok {
 		c.evictList.MoveToFront(ent)
+		previous = ent.Value.(*entry).value
 		ent.Value.(*entry).value = value
-		return false
+		return previous, true, false
 	}
 
 	// Add new item
@@ -61,12 +68,12 @@ func (c *LRU) Add(key, value interface{}) (evicted bool) {
 	entry := c.evictList.PushFront(ent)
 	c.items[key] = entry
 
-	evict := c.evictList.Len() > c.size
+	evicted = c.evictList.Len() > c.size
 	// Verify size not exceeded
-	if evict {
+	if evicted {
 		c.removeOldest()
 	}
-	return evict
+	return nil, false, evicted
 }
 
 // Get looks up a key's value from the cache.

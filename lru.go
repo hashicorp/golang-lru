@@ -71,17 +71,7 @@ func (c *Cache) Purge() {
 
 // Add adds a value to the cache. Returns true if an eviction occurred.
 func (c *Cache) Add(key, value interface{}) (evicted bool) {
-	var k, v interface{}
-	c.lock.Lock()
-	evicted = c.lru.Add(key, value)
-	if c.onEvictedCB != nil && evicted {
-		k, v = c.evictedKeys[0], c.evictedVals[0]
-		c.evictedKeys, c.evictedVals = c.evictedKeys[:0], c.evictedVals[:0]
-	}
-	c.lock.Unlock()
-	if c.onEvictedCB != nil && evicted {
-		c.onEvictedCB(k, v)
-	}
+	_, _, evicted = c.GetAndAdd(key, value)
 	return
 }
 
@@ -91,6 +81,22 @@ func (c *Cache) Get(key interface{}) (value interface{}, ok bool) {
 	value, ok = c.lru.Get(key)
 	c.lock.Unlock()
 	return value, ok
+}
+
+// GetAndAdd returns the previous key's value from the cache and adds a new one.
+func (c *Cache) GetAndAdd(key, value interface{}) (previous interface{}, ok, evicted bool) {
+	var k, v interface{}
+	c.lock.Lock()
+	previous, ok, evicted = c.lru.GetAndAdd(key, value)
+	if c.onEvictedCB != nil && evicted {
+		k, v = c.evictedKeys[0], c.evictedVals[0]
+		c.evictedKeys, c.evictedVals = c.evictedKeys[:0], c.evictedVals[:0]
+	}
+	c.lock.Unlock()
+	if c.onEvictedCB != nil && evicted {
+		c.onEvictedCB(k, v)
+	}
+	return
 }
 
 // Contains checks if a key is in the cache, without updating the
