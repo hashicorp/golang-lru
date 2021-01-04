@@ -2,6 +2,7 @@ package lru
 
 import (
 	"math/rand"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -355,6 +356,68 @@ func TestARC_Contains(t *testing.T) {
 	if l.Contains(1) {
 		t.Errorf("Contains should not have updated recent-ness of 1")
 	}
+}
+
+// Test that the arc evicts entries exactly once.
+func TestARC_Evict(t *testing.T) {
+	type tcase struct {
+		arcSize int
+		data    []int
+		// expected list of eviction calls
+		expected []int
+	}
+
+	testcases := map[string]tcase{
+		"basic": tcase{
+			arcSize:  8,
+			data:     []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+			expected: []int{1, 2},
+		},
+		// 1 & 2 repeat and aren't evicted
+		"repeats": tcase{
+			arcSize:  8,
+			data:     []int{1, 1, 2, 3, 4, 5, 6, 7, 2, 8, 9, 10},
+			expected: []int{3, 4},
+		},
+		"noevicts": tcase{
+			arcSize:  8,
+			data:     []int{1, 1, 1, 1, 2, 2, 2},
+			expected: []int{},
+		},
+		// 1 and 2 should be evicted twice
+		"doubleevict": tcase{
+			arcSize:  8,
+			data:     []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+			expected: []int{1, 2, 3, 4, 5, 6, 1, 2},
+		},
+	}
+
+	fn := func(t *testing.T, tc tcase) {
+		evicted := []int{}
+
+		l, err := NewARCWithEvict(tc.arcSize,
+			func(key interface{}, value interface{}) {
+				v := value.(int)
+				evicted = append(evicted, v)
+			})
+		if err != nil {
+			t.Fatalf("err: %v", err)
+		}
+
+		for _, v := range tc.data {
+			l.Add(v, v)
+		}
+
+		if reflect.DeepEqual(tc.expected, evicted) == false {
+			t.Errorf("expected eviction list %v got %v", tc.expected, evicted)
+		}
+	}
+
+	for k, tc := range testcases {
+		tc := tc
+		t.Run(k, func(t *testing.T) { fn(t, tc) })
+	}
+
 }
 
 // Test that Peek doesn't update recent-ness

@@ -18,17 +18,22 @@ type ARCCache struct {
 	size int // Size is the total capacity of the cache
 	p    int // P is the dynamic preference towards T1 or T2
 
-	t1 simplelru.LRUCache // T1 is the LRU for recently accessed items
-	b1 simplelru.LRUCache // B1 is the LRU for evictions from t1
+	t1 *simplelru.LRU // T1 is the LRU for recently accessed items
+	b1 *simplelru.LRU // B1 is the LRU for evictions from t1
 
-	t2 simplelru.LRUCache // T2 is the LRU for frequently accessed items
-	b2 simplelru.LRUCache // B2 is the LRU for evictions from t2
+	t2 *simplelru.LRU // T2 is the LRU for frequently accessed items
+	b2 *simplelru.LRU // B2 is the LRU for evictions from t2
 
 	lock sync.RWMutex
 }
 
 // NewARC creates an ARC of the given size
 func NewARC(size int) (*ARCCache, error) {
+	return NewARCWithEvict(size, nil)
+}
+
+// NewARC creates an ARC of the given size
+func NewARCWithEvict(size int, onEvicted func(key interface{}, value interface{})) (*ARCCache, error) {
 	// Create the sub LRUs
 	b1, err := simplelru.NewLRU(size, nil)
 	if err != nil {
@@ -38,11 +43,12 @@ func NewARC(size int) (*ARCCache, error) {
 	if err != nil {
 		return nil, err
 	}
-	t1, err := simplelru.NewLRU(size, nil)
+	evictCallback := simplelru.EvictCallback(onEvicted)
+	t1, err := simplelru.NewLRU(size, evictCallback)
 	if err != nil {
 		return nil, err
 	}
-	t2, err := simplelru.NewLRU(size, nil)
+	t2, err := simplelru.NewLRU(size, evictCallback)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +73,7 @@ func (c *ARCCache) Get(key interface{}) (value interface{}, ok bool) {
 	// If the value is contained in T1 (recent), then
 	// promote it to T2 (frequent)
 	if val, ok := c.t1.Peek(key); ok {
-		c.t1.Remove(key)
+		c.t1.RemoveWithoutEvict(key)
 		c.t2.Add(key, val)
 		return val, ok
 	}
@@ -89,7 +95,7 @@ func (c *ARCCache) Add(key, value interface{}) {
 	// Check if the value is contained in T1 (recent), and potentially
 	// promote it to frequent T2
 	if c.t1.Contains(key) {
-		c.t1.Remove(key)
+		c.t1.RemoveWithoutEvict(key)
 		c.t2.Add(key, value)
 		return
 	}
