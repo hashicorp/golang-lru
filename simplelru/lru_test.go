@@ -128,6 +128,25 @@ func TestLRU_Add(t *testing.T) {
 	}
 }
 
+func TestLRU_GetAndAdd(t *testing.T) {
+	l, err := NewLRU(1, nil)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if previous, ok, evicted := l.GetAndAdd(1, 1); ok || evicted {
+		t.Errorf("1 should not be found, eviction should not be: %v, %v, %v", previous, ok, evicted)
+	}
+	if previous, ok, evicted := l.GetAndAdd(1, 10); !ok || previous != 1 || evicted {
+		t.Errorf("1 should be returned as previous value, eviction should not be: %v, %v, %v", previous, ok, evicted)
+	}
+	if v, ok := l.Get(1); !ok || v != 10 {
+		t.Errorf("1 should be set to 10: %v, %v", v, ok)
+	}
+	if previous, ok, evicted := l.GetAndAdd(2, 2); ok || !evicted {
+		t.Errorf("2 should not be found, eviction should be: %v, %v, %v", previous, ok, evicted)
+	}
+}
+
 // Test that Contains doesn't update recent-ness
 func TestLRU_Contains(t *testing.T) {
 	l, err := NewLRU(2, nil)
