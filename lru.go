@@ -166,7 +166,7 @@ func (c *Cache) Remove(key interface{}) (present bool) {
 	}
 	c.lock.Unlock()
 	if c.onEvictedCB != nil && present {
-		c.onEvicted(k, v)
+		c.onEvictedCB(k, v)
 	}
 	return
 }
