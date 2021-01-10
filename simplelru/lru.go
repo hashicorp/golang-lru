@@ -5,9 +5,6 @@ import (
 	"errors"
 )
 
-// EvictCallback is used to get a callback when a cache entry is evicted
-type EvictCallback func(key interface{}, value interface{})
-
 // LRU implements a non-thread safe fixed size LRU cache
 type LRU struct {
 	size      int
@@ -48,7 +45,7 @@ func (c *LRU) Purge() {
 }
 
 // Add adds a value to the cache.  Returns true if an eviction occurred.
-func (c *LRU) Add(key, value interface{}) (evicted bool) {
+func (c *LRU) Add(key, value interface{}) (evict bool) {
 	// Check for existing item
 	if ent, ok := c.items[key]; ok {
 		c.evictList.MoveToFront(ent)
@@ -61,12 +58,12 @@ func (c *LRU) Add(key, value interface{}) (evicted bool) {
 	entry := c.evictList.PushFront(ent)
 	c.items[key] = entry
 
-	evict := c.evictList.Len() > c.size
+	evict = c.evictList.Len() > c.size
 	// Verify size not exceeded
 	if evict {
 		c.removeOldest()
 	}
-	return evict
+	return
 }
 
 // Get looks up a key's value from the cache.

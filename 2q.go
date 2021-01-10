@@ -1,20 +1,9 @@
 package lru
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/hashicorp/golang-lru/simplelru"
-)
-
-const (
-	// Default2QRecentRatio is the ratio of the 2Q cache dedicated
-	// to recently added entries that have only been accessed once.
-	Default2QRecentRatio = 0.25
-
-	// Default2QGhostEntries is the default ratio of ghost
-	// entries kept to track entries recently evicted
-	Default2QGhostEntries = 0.50
 )
 
 // TwoQueueCache is a thread-safe fixed size 2Q cache.
@@ -27,145 +16,69 @@ const (
 // head. The ARCCache is similar, but does not require setting any
 // parameters.
 type TwoQueueCache struct {
-	size       int
-	recentSize int
-
-	recent      simplelru.LRUCache
-	frequent    simplelru.LRUCache
-	recentEvict simplelru.LRUCache
-	lock        sync.RWMutex
+	lru                    *simplelru.TwoQueueLRU
+	evictedKey, evictedVal interface{}
+	onEvictedCB            func(k, v interface{})
+	lock                   sync.RWMutex
 }
 
 // New2Q creates a new TwoQueueCache using the default
 // values for the parameters.
 func New2Q(size int) (*TwoQueueCache, error) {
-	return New2QParams(size, Default2QRecentRatio, Default2QGhostEntries)
+	return New2QParams(size, nil, simplelru.Default2QRecentRatio, simplelru.Default2QGhostEntries)
+}
+
+// New2QWithEvict creates a new TwoQueueCache using the default
+// values for the parameters and a callback to receive evicted values
+func New2QWithEvict(size int, onEvict func(k, v interface{})) (*TwoQueueCache, error) {
+	return New2QParams(size, onEvict, simplelru.Default2QRecentRatio, simplelru.Default2QGhostEntries)
 }
 
 // New2QParams creates a new TwoQueueCache using the provided
 // parameter values.
-func New2QParams(size int, recentRatio, ghostRatio float64) (*TwoQueueCache, error) {
-	if size <= 0 {
-		return nil, fmt.Errorf("invalid size")
+func New2QParams(size int, onEvict func(k, v interface{}), recentRatio, ghostRatio float64) (c *TwoQueueCache, err error) {
+	c = &TwoQueueCache{onEvictedCB: onEvict}
+	if onEvict != nil {
+		onEvict = c.onEvicted
 	}
-	if recentRatio < 0.0 || recentRatio > 1.0 {
-		return nil, fmt.Errorf("invalid recent ratio")
-	}
-	if ghostRatio < 0.0 || ghostRatio > 1.0 {
-		return nil, fmt.Errorf("invalid ghost ratio")
-	}
+	c.lru, err = simplelru.New2QParams(size, onEvict, recentRatio, ghostRatio)
+	return
+}
 
-	// Determine the sub-sizes
-	recentSize := int(float64(size) * recentRatio)
-	evictSize := int(float64(size) * ghostRatio)
-
-	// Allocate the LRUs
-	recent, err := simplelru.NewLRU(size, nil)
-	if err != nil {
-		return nil, err
-	}
-	frequent, err := simplelru.NewLRU(size, nil)
-	if err != nil {
-		return nil, err
-	}
-	recentEvict, err := simplelru.NewLRU(evictSize, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	// Initialize the cache
-	c := &TwoQueueCache{
-		size:        size,
-		recentSize:  recentSize,
-		recent:      recent,
-		frequent:    frequent,
-		recentEvict: recentEvict,
-	}
-	return c, nil
+// evicted key/val will be saved and sent thru registered callback
+// outside of critical section later
+func (c *TwoQueueCache) onEvicted(k, v interface{}) {
+	c.evictedKey = k
+	c.evictedVal = v
 }
 
 // Get looks up a key's value from the cache.
 func (c *TwoQueueCache) Get(key interface{}) (value interface{}, ok bool) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-
-	// Check if this is a frequent value
-	if val, ok := c.frequent.Get(key); ok {
-		return val, ok
-	}
-
-	// If the value is contained in recent, then we
-	// promote it to frequent
-	if val, ok := c.recent.Peek(key); ok {
-		c.recent.Remove(key)
-		c.frequent.Add(key, val)
-		return val, ok
-	}
-
-	// No hit
-	return nil, false
+	return c.lru.Get(key)
 }
 
-// Add adds a value to the cache.
-func (c *TwoQueueCache) Add(key, value interface{}) {
+// Add adds a value to the cache, return true if eviction happens.
+func (c *TwoQueueCache) Add(key, value interface{}) (evicted bool) {
+	var ke, ve interface{}
 	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	// Check if the value is frequently used already,
-	// and just update the value
-	if c.frequent.Contains(key) {
-		c.frequent.Add(key, value)
-		return
+	evicted = c.lru.Add(key, value)
+	ke, ve = c.evictedKey, c.evictedVal
+	c.evictedKey = nil
+	c.evictedVal = nil
+	c.lock.Unlock()
+	if evicted && c.onEvictedCB != nil {
+		c.onEvictedCB(ke, ve)
 	}
-
-	// Check if the value is recently used, and promote
-	// the value into the frequent list
-	if c.recent.Contains(key) {
-		c.recent.Remove(key)
-		c.frequent.Add(key, value)
-		return
-	}
-
-	// If the value was recently evicted, add it to the
-	// frequently used list
-	if c.recentEvict.Contains(key) {
-		c.ensureSpace(true)
-		c.recentEvict.Remove(key)
-		c.frequent.Add(key, value)
-		return
-	}
-
-	// Add to the recently seen list
-	c.ensureSpace(false)
-	c.recent.Add(key, value)
-}
-
-// ensureSpace is used to ensure we have space in the cache
-func (c *TwoQueueCache) ensureSpace(recentEvict bool) {
-	// If we have space, nothing to do
-	recentLen := c.recent.Len()
-	freqLen := c.frequent.Len()
-	if recentLen+freqLen < c.size {
-		return
-	}
-
-	// If the recent buffer is larger than
-	// the target, evict from there
-	if recentLen > 0 && (recentLen > c.recentSize || (recentLen == c.recentSize && !recentEvict)) {
-		k, _, _ := c.recent.RemoveOldest()
-		c.recentEvict.Add(k, nil)
-		return
-	}
-
-	// Remove from the frequent list otherwise
-	c.frequent.RemoveOldest()
+	return
 }
 
 // Len returns the number of items in the cache.
 func (c *TwoQueueCache) Len() int {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	return c.recent.Len() + c.frequent.Len()
+	return c.lru.Len()
 }
 
 // Keys returns a slice of the keys in the cache.
@@ -173,33 +86,42 @@ func (c *TwoQueueCache) Len() int {
 func (c *TwoQueueCache) Keys() []interface{} {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	k1 := c.frequent.Keys()
-	k2 := c.recent.Keys()
-	return append(k1, k2...)
+	return c.lru.Keys()
 }
 
 // Remove removes the provided key from the cache.
-func (c *TwoQueueCache) Remove(key interface{}) {
+func (c *TwoQueueCache) Remove(key interface{}) (ok bool) {
+	var ke, ve interface{}
 	c.lock.Lock()
-	defer c.lock.Unlock()
-	if c.frequent.Remove(key) {
-		return
+	ok = c.lru.Remove(key)
+	ke, ve = c.evictedKey, c.evictedVal
+	c.evictedKey = nil
+	c.evictedVal = nil
+	c.lock.Unlock()
+	if ok && c.onEvictedCB != nil {
+		c.onEvictedCB(ke, ve)
 	}
-	if c.recent.Remove(key) {
-		return
-	}
-	if c.recentEvict.Remove(key) {
-		return
-	}
+	return
 }
 
 // Purge is used to completely clear the cache.
 func (c *TwoQueueCache) Purge() {
+	var keys, vals []interface{}
 	c.lock.Lock()
-	defer c.lock.Unlock()
-	c.recent.Purge()
-	c.frequent.Purge()
-	c.recentEvict.Purge()
+	if c.onEvictedCB != nil {
+		keys = c.lru.Keys()
+		for _, k := range keys {
+			val, _ := c.lru.Peek(k)
+			vals = append(vals, val)
+		}
+	}
+	c.lru.Purge()
+	c.lock.Unlock()
+	if c.onEvictedCB != nil {
+		for i := 0; i < len(keys); i++ {
+			c.onEvictedCB(keys[i], vals[i])
+		}
+	}
 }
 
 // Contains is used to check if the cache contains a key
@@ -207,7 +129,7 @@ func (c *TwoQueueCache) Purge() {
 func (c *TwoQueueCache) Contains(key interface{}) bool {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	return c.frequent.Contains(key) || c.recent.Contains(key)
+	return c.lru.Contains(key)
 }
 
 // Peek is used to inspect the cache value of a key
@@ -215,8 +137,5 @@ func (c *TwoQueueCache) Contains(key interface{}) bool {
 func (c *TwoQueueCache) Peek(key interface{}) (value interface{}, ok bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	if val, ok := c.frequent.Peek(key); ok {
-		return val, ok
-	}
-	return c.recent.Peek(key)
+	return c.lru.Peek(key)
 }
