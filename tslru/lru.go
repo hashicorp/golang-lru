@@ -111,7 +111,7 @@ func (c *LRU) Add(key, value interface{}) (evicted bool) {
 	ent := &entry{key: key, value: value}
 	c.mu.Lock()
 	c.items[key] = ent
-	evicted = len(c.items) > int(c.limit)
+	evicted = len(c.items) > int(atomic.LoadInt32(&c.limit))
 	c.mu.Unlock()
 	select {
 	case c.ctl <- action{t: AddAction, ele: ent}:

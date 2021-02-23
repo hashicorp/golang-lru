@@ -1,9 +1,8 @@
 package lru
 
 import (
-	"tslru"
-
 	"github.com/hashicorp/golang-lru/simplelru"
+	"github.com/laotoutou/golang-lru/tslru"
 )
 
 // Fragmentation can reduce lock contention, but the hash function affects efficiency
