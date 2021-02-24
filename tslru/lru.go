@@ -217,7 +217,7 @@ func (c *LRU) Keys() []interface{} {
 	a := action{t: iterAction, o: make(chan interface{})}
 	c.ctl <- a
 
-	var ret []interface{}
+	var ret = make([]interface{}, c.Len())
 	for k := range a.o {
 		ret = append(ret, k)
 	}

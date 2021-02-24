@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func BenchmarkLRU_Rand(b *testing.B) {
+func BenchmarkTSLRU_Rand(b *testing.B) {
 	l, err := NewTSCache(8192)
 	if err != nil {
 		b.Fatalf("err: %v", err)
@@ -34,7 +34,7 @@ func BenchmarkLRU_Rand(b *testing.B) {
 	b.Logf("hit: %d miss: %d ratio: %f", hit, miss, float64(hit)/float64(miss))
 }
 
-func BenchmarkLRU_Freq(b *testing.B) {
+func BenchmarkTSLRU_Freq(b *testing.B) {
 	l, err := NewTSCache(8192)
 	if err != nil {
 		b.Fatalf("err: %v", err)
@@ -66,7 +66,7 @@ func BenchmarkLRU_Freq(b *testing.B) {
 	b.Logf("hit: %d miss: %d ratio: %f", hit, miss, float64(hit)/float64(miss))
 }
 
-func TestLRU(t *testing.T) {
+func TestTSLRU(t *testing.T) {
 	l, err := NewTSCache(128)
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -122,7 +122,7 @@ func TestLRU(t *testing.T) {
 }
 
 // test that Add returns true/false if an eviction occurred
-func TestLRUAdd(t *testing.T) {
+func TestTSLRUAdd(t *testing.T) {
 
 	l, err := NewTSCache(1)
 	if err != nil {
@@ -138,7 +138,7 @@ func TestLRUAdd(t *testing.T) {
 }
 
 // test that Contains doesn't update recent-ness
-func TestLRUContains(t *testing.T) {
+func TestTSLRUContains(t *testing.T) {
 	l, err := NewTSCache(2)
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -157,7 +157,7 @@ func TestLRUContains(t *testing.T) {
 }
 
 // test that ContainsOrAdd doesn't update recent-ness
-func TestLRUContainsOrAdd(t *testing.T) {
+func TestTSLRUContainsOrAdd(t *testing.T) {
 	l, err := NewTSCache(2)
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -187,7 +187,7 @@ func TestLRUContainsOrAdd(t *testing.T) {
 }
 
 // test that PeekOrAdd doesn't update recent-ness
-func TestLRUPeekOrAdd(t *testing.T) {
+func TestTSLRUPeekOrAdd(t *testing.T) {
 	l, err := NewTSCache(2)
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -220,7 +220,7 @@ func TestLRUPeekOrAdd(t *testing.T) {
 }
 
 // test that Peek doesn't update recent-ness
-func TestLRUPeek(t *testing.T) {
+func TestTSLRUPeek(t *testing.T) {
 	l, err := NewTSCache(2)
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -239,7 +239,7 @@ func TestLRUPeek(t *testing.T) {
 }
 
 // test that Resize can upsize and downsize
-func TestLRUResize(t *testing.T) {
+func TestTSLRUResize(t *testing.T) {
 
 	l, err := NewTSCache(2)
 	if err != nil {
