@@ -28,8 +28,7 @@ func (c *TSCache) Purge() {
 
 // Add adds a value to the cache. Returns true if an eviction occurred.
 func (c *TSCache) Add(key, value interface{}) (evicted bool) {
-	evicted = c.lru.Add(key, value)
-	return
+	return c.lru.Add(key, value)
 }
 
 // Get looks up a key's value from the cache.
@@ -77,8 +76,7 @@ func (c *TSCache) Remove(key interface{}) (present bool) {
 
 // Resize changes the cache size.
 func (c *TSCache) Resize(size int) (evicted int) {
-	c.lru.Resize(size)
-	return
+	return c.lru.Resize(size)
 }
 
 // Keys returns a slice of the keys in the cache, from oldest to newest.
