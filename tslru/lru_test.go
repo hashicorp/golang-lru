@@ -1,16 +1,12 @@
 package tslru
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestLRU(t *testing.T) {
-	evictCounter := 0
-	onEvicted := func(k interface{}, v interface{}) {
-		if k != v {
-			t.Fatalf("Evict values not equal (%v!=%v)", k, v)
-		}
-		evictCounter++
-	}
-	l, err := NewLRU(128, onEvicted)
+
+	l, err := NewLRU(128)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -20,10 +16,6 @@ func TestLRU(t *testing.T) {
 	}
 	if l.Len() != 128 {
 		t.Fatalf("bad len: %v", l.Len())
-	}
-
-	if evictCounter != 128 {
-		t.Fatalf("bad evict count: %v", evictCounter)
 	}
 
 	for i, k := range l.Keys() {
@@ -76,7 +68,7 @@ func TestLRU(t *testing.T) {
 }
 
 func TestLRU_GetOldest_RemoveOldest(t *testing.T) {
-	l, err := NewLRU(128, nil)
+	l, err := NewLRU(128)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -110,27 +102,23 @@ func TestLRU_GetOldest_RemoveOldest(t *testing.T) {
 
 // Test that Add returns true/false if an eviction occurred
 func TestLRU_Add(t *testing.T) {
-	evictCounter := 0
-	onEvicted := func(k interface{}, v interface{}) {
-		evictCounter++
-	}
 
-	l, err := NewLRU(1, onEvicted)
+	l, err := NewLRU(1)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
 
-	if l.Add(1, 1) == true || evictCounter != 0 {
+	if l.Add(1, 1) == true {
 		t.Errorf("should not have an eviction")
 	}
-	if l.Add(2, 2) == false || evictCounter != 1 {
+	if l.Add(2, 2) == false {
 		t.Errorf("should have an eviction")
 	}
 }
 
 // Test that Contains doesn't update recent-ness
 func TestLRU_Contains(t *testing.T) {
-	l, err := NewLRU(2, nil)
+	l, err := NewLRU(2)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -149,7 +137,7 @@ func TestLRU_Contains(t *testing.T) {
 
 // Test that Peek doesn't update recent-ness
 func TestLRU_Peek(t *testing.T) {
-	l, err := NewLRU(2, nil)
+	l, err := NewLRU(2)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -168,11 +156,8 @@ func TestLRU_Peek(t *testing.T) {
 
 // Test that Resize can upsize and downsize
 func TestLRU_Resize(t *testing.T) {
-	onEvictCounter := 0
-	onEvicted := func(k interface{}, v interface{}) {
-		onEvictCounter++
-	}
-	l, err := NewLRU(2, onEvicted)
+
+	l, err := NewLRU(2)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -183,9 +168,6 @@ func TestLRU_Resize(t *testing.T) {
 	evicted := l.Resize(1)
 	if evicted != 1 {
 		t.Errorf("1 element should have been evicted: %v", evicted)
-	}
-	if onEvictCounter != 1 {
-		t.Errorf("onEvicted should have been called 1 time: %v", onEvictCounter)
 	}
 
 	l.Add(3, 3)

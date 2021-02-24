@@ -11,21 +11,20 @@ import (
 type actionType string
 
 const (
-	hitAction    actionType = "hit" // Get()
+	hitAction    actionType = "hit"
 	addAction    actionType = "add"
 	delAction    actionType = "del"
 	oldestAction actionType = "get_old"
 	iterAction   actionType = "iter"
 	purgeAction  actionType = "purge"
+	gcAction     actionType = "gc"
 )
 
 type action struct {
 	t   actionType
 	ele *entry
 
-	o1 chan interface{}
-	o2 chan *entry
-	o3 chan struct{}
+	o chan interface{}
 }
 
 // LRU implements a thread safe fixed size LRU cache
@@ -65,39 +64,53 @@ func (c *LRU) work() {
 		act := <-c.ctl
 		switch act.t {
 		case hitAction:
-			if ele := act.ele.element; ele != nil {
-				c.evictList.MoveToFront(ele)
+			c.mu.RLock()
+			_, ok := c.items[act.ele.key]
+			c.mu.RUnlock()
+			if ok {
+				c.evictList.MoveToFront(act.ele.element)
 			}
 		case addAction:
-			limit := int(atomic.LoadInt32(&c.limit))
 			c.mu.Lock()
-			if len(c.items) > limit+500 {
-				ele := c.evictList.Back()
-				for len(c.items) > limit && ele != nil {
-					delete(c.items, ele.Value.(*entry).key)
-					ele2 := ele.Prev()
-					c.evictList.Remove(ele)
-					ele = ele2
-				}
-			}
+			c.items[act.ele.key] = act.ele
+			act.o <- c.gc() > 0
 			c.mu.Unlock()
 			act.ele.element = c.evictList.PushFront(act.ele)
 		case delAction:
 			c.evictList.Remove(act.ele.element)
 		case oldestAction:
-			if ele := c.evictList.Back(); ele != nil {
-				act.o2 <- ele.Value.(*entry)
-			}
+			act.o <- c.evictList.Back().Value.(*entry)
 		case iterAction:
 			for ele := c.evictList.Back(); ele != nil && ele != c.evictList.Front(); ele = ele.Prev() {
-				act.o1 <- ele.Value.(*entry).key
+				act.o <- ele.Value.(*entry).key
 			}
-			close(act.o1)
+			close(act.o)
 		case purgeAction:
+			c.mu.Lock()
+			c.items = make(map[interface{}]*entry)
+			c.mu.Unlock()
+
 			c.evictList.Init()
-			act.o3 <- struct{}{}
+			act.o <- struct{}{}
+		case gcAction:
+			c.mu.Lock()
+			n := c.gc()
+			c.mu.Unlock()
+			act.o <- n
 		}
 	}
+}
+
+func (c *LRU) gc() (n int) {
+	ele := c.evictList.Back()
+	for len(c.items) > int(atomic.LoadInt32(&c.limit)) && ele != nil {
+		n++
+		delete(c.items, ele.Value.(*entry).key)
+		ele2 := ele.Prev()
+		c.evictList.Remove(ele)
+		ele = ele2
+	}
+	return
 }
 
 // Len Returns the number of items in the items.
@@ -110,13 +123,20 @@ func (c *LRU) Len() int {
 
 // Add adds a value to the items.  Returns true if an eviction occurred.
 func (c *LRU) Add(key, value interface{}) (evicted bool) {
-	ent := &entry{key: key, value: value}
-	c.mu.Lock()
-	c.items[key] = ent
-	evicted = len(c.items) > int(atomic.LoadInt32(&c.limit))
-	c.mu.Unlock()
-	c.ctl <- action{t: addAction, ele: ent}
-	return
+	c.mu.RLock()
+	ent, ok := c.items[key]
+	c.mu.RUnlock()
+	if ok {
+		c.ctl <- action{t: hitAction, ele: ent}
+		return false
+	}
+
+	ent = &entry{key: key, value: value}
+	a := action{t: addAction, ele: ent, o: make(chan interface{})}
+	c.ctl <- a
+
+	b := <-a.o
+	return b.(bool)
 }
 
 // Get looks up a key's value from the cache.
@@ -182,10 +202,11 @@ func (c *LRU) RemoveOldest() (interface{}, interface{}, bool) {
 
 // GetOldest Returns the oldest entry from the cache. #key, value, isFound
 func (c *LRU) GetOldest() (interface{}, interface{}, bool) {
-	a := action{t: oldestAction, o2: make(chan *entry)}
+	a := action{t: oldestAction, o: make(chan interface{})}
 	c.ctl <- a
 
-	if ent := <-a.o2; ent != nil {
+	if o := <-a.o; o != nil {
+		ent := o.(*entry)
 		return ent.key, ent.value, true
 	}
 	return nil, nil, false
@@ -193,11 +214,11 @@ func (c *LRU) GetOldest() (interface{}, interface{}, bool) {
 
 // Keys Returns a slice of the keys in the cache, from oldest to newest.
 func (c *LRU) Keys() []interface{} {
-	a := action{t: iterAction, o1: make(chan interface{})}
+	a := action{t: iterAction, o: make(chan interface{})}
 	c.ctl <- a
 
-	var ret = make([]interface{}, 0, c.Len())
-	for k := range a.o1 {
+	var ret []interface{}
+	for k := range a.o {
 		ret = append(ret, k)
 	}
 	return ret
@@ -205,27 +226,17 @@ func (c *LRU) Keys() []interface{} {
 
 // Purge Clears all cache entries.
 func (c *LRU) Purge() {
-	c.mu.Lock()
-	c.items = make(map[interface{}]*entry)
-	c.mu.Unlock()
-
-	a := action{t: purgeAction, o3: make(chan struct{})}
+	a := action{t: purgeAction, o: make(chan interface{})}
 	c.ctl <- a
-	<-a.o3
+	<-a.o
 }
 
 // Resize cache, returning number evicted
 func (c *LRU) Resize(newSize int) int {
-	diff := newSize - int(atomic.LoadInt32(&c.limit))
 	atomic.StoreInt32(&c.limit, int32(newSize))
+	a := action{t: gcAction, o: make(chan interface{})}
+	c.ctl <- a
 
-	num := 0
-	for diff < 0 {
-		if _, _, ok := c.RemoveOldest(); !ok {
-			break
-		}
-		num++
-		diff++
-	}
-	return num
+	b := <-a.o
+	return b.(int)
 }
