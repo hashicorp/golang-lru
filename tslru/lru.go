@@ -34,6 +34,7 @@ type LRU struct {
 	evictList *list.List
 	items     map[interface{}]*entry
 	ctl       chan action
+	pool      sync.Pool
 }
 
 // entry is used to hold a value in the evictList
@@ -53,6 +54,9 @@ func NewLRU(size int) (*LRU, error) {
 		evictList: list.New(),
 		ctl:       make(chan action, 1024),
 		items:     make(map[interface{}]*entry),
+		pool: sync.Pool{New: func() interface{} {
+			return &entry{}
+		}},
 	}
 	go c.work()
 	return c, nil
@@ -107,7 +111,8 @@ func (c *LRU) gc() (n int) {
 		n++
 		delete(c.items, ele.Value.(*entry).key)
 		ele2 := ele.Prev()
-		c.evictList.Remove(ele)
+		v := c.evictList.Remove(ele)
+		c.pool.Put(v)
 		ele = ele2
 	}
 	return
@@ -131,7 +136,9 @@ func (c *LRU) Add(key, value interface{}) (evicted bool) {
 		return false
 	}
 
-	ent = &entry{key: key, value: value}
+	ent = c.pool.Get().(*entry)
+	ent.key = key
+	ent.value = value
 	a := action{t: addAction, ele: ent, o: make(chan interface{})}
 	c.ctl <- a
 
