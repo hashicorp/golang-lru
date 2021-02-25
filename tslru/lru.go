@@ -68,12 +68,7 @@ func (c *LRU) work() {
 		act := <-c.ctl
 		switch act.t {
 		case hitAction:
-			c.mu.RLock()
-			_, ok := c.items[act.ele.key]
-			c.mu.RUnlock()
-			if ok {
-				c.evictList.MoveToFront(act.ele.element)
-			}
+			c.evictList.MoveToFront(act.ele.element)
 		case addAction:
 			c.mu.Lock()
 			c.items[act.ele.key] = act.ele
@@ -112,6 +107,7 @@ func (c *LRU) gc() (n int) {
 		delete(c.items, ele.Value.(*entry).key)
 		ele2 := ele.Prev()
 		v := c.evictList.Remove(ele)
+		v.(*entry).element = nil
 		c.pool.Put(v)
 		ele = ele2
 	}
