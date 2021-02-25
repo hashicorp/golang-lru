@@ -29,12 +29,11 @@ type action struct {
 
 // LRU implements a thread safe fixed size LRU cache
 type LRU struct {
-	mu        sync.RWMutex
 	limit     int32
+	size      int32
 	evictList *list.List
-	items     map[interface{}]*entry
+	items     sync.Map
 	ctl       chan action
-	pool      sync.Pool
 }
 
 // entry is used to hold a value in the evictList
@@ -53,10 +52,6 @@ func NewLRU(size int) (*LRU, error) {
 		limit:     int32(size),
 		evictList: list.New(),
 		ctl:       make(chan action, 1024),
-		items:     make(map[interface{}]*entry),
-		pool: sync.Pool{New: func() interface{} {
-			return &entry{}
-		}},
 	}
 	go c.work()
 	return c, nil
@@ -70,12 +65,21 @@ func (c *LRU) work() {
 		case hitAction:
 			c.evictList.MoveToFront(act.ele.element)
 		case addAction:
-			c.mu.Lock()
-			c.items[act.ele.key] = act.ele
+			c.items.Store(act.ele.key, act.ele)
+			atomic.AddInt32(&c.size, 1)
+
 			act.o <- c.gc() > 0
-			c.mu.Unlock()
 			act.ele.element = c.evictList.PushFront(act.ele)
 		case delAction:
+			_, ok := c.items.Load(act.ele.key)
+			c.items.Delete(act.ele.key)
+			atomic.AddInt32(&c.size, -1)
+
+			if ok {
+				act.o <- true
+			} else {
+				act.o <- false
+			}
 			c.evictList.Remove(act.ele.element)
 		case oldestAction:
 			act.o <- c.evictList.Back().Value.(*entry)
@@ -85,16 +89,16 @@ func (c *LRU) work() {
 			}
 			close(act.o)
 		case purgeAction:
-			c.mu.Lock()
-			c.items = make(map[interface{}]*entry)
-			c.mu.Unlock()
+			c.items.Range(func(key, value interface{}) bool {
+				c.items.Delete(key)
+				atomic.AddInt32(&c.size, -1)
+				return true
+			})
 
 			c.evictList.Init()
 			act.o <- struct{}{}
 		case gcAction:
-			c.mu.Lock()
 			n := c.gc()
-			c.mu.Unlock()
 			act.o <- n
 		}
 	}
@@ -102,39 +106,32 @@ func (c *LRU) work() {
 
 func (c *LRU) gc() (n int) {
 	ele := c.evictList.Back()
-	for len(c.items) > int(atomic.LoadInt32(&c.limit)) && ele != nil {
-		n++
-		delete(c.items, ele.Value.(*entry).key)
+
+	for atomic.LoadInt32(&c.size) > atomic.LoadInt32(&c.limit) && ele != nil {
+		c.items.Delete(ele.Value.(*entry).key)
+		atomic.AddInt32(&c.size, -1)
 		ele2 := ele.Prev()
-		v := c.evictList.Remove(ele)
-		v.(*entry).element = nil
-		c.pool.Put(v)
+		c.evictList.Remove(ele)
 		ele = ele2
+		n++
 	}
 	return
 }
 
 // Len Returns the number of items in the items.
 func (c *LRU) Len() int {
-	c.mu.RLock()
-	size := len(c.items)
-	c.mu.RUnlock()
-	return size
+	return int(atomic.LoadInt32(&c.size))
 }
 
 // Add adds a value to the items.  Returns true if an eviction occurred.
 func (c *LRU) Add(key, value interface{}) (evicted bool) {
-	c.mu.RLock()
-	ent, ok := c.items[key]
-	c.mu.RUnlock()
+	itf, ok := c.items.Load(key)
 	if ok {
-		c.ctl <- action{t: hitAction, ele: ent}
+		c.ctl <- action{t: hitAction, ele: itf.(*entry)}
 		return false
 	}
 
-	ent = c.pool.Get().(*entry)
-	ent.key = key
-	ent.value = value
+	ent := &entry{key: key, value: value}
 	a := action{t: addAction, ele: ent, o: make(chan interface{})}
 	c.ctl <- a
 
@@ -144,10 +141,9 @@ func (c *LRU) Add(key, value interface{}) (evicted bool) {
 
 // Get looks up a key's value from the cache.
 func (c *LRU) Get(key interface{}) (value interface{}, ok bool) {
-	c.mu.RLock()
-	ent, ok := c.items[key]
-	c.mu.RUnlock()
+	itf, ok := c.items.Load(key)
 	if ok {
+		ent := itf.(*entry)
 		select {
 		case c.ctl <- action{t: hitAction, ele: ent}:
 		default:
@@ -161,20 +157,16 @@ func (c *LRU) Get(key interface{}) (value interface{}, ok bool) {
 // Contains checks if a key is in the cache, without updating the recent-ness
 // or deleting it for being stale.
 func (c *LRU) Contains(key interface{}) (ok bool) {
-	c.mu.RLock()
-	_, ok = c.items[key]
-	c.mu.RUnlock()
+	_, ok = c.items.Load(key)
 	return ok
 }
 
 // Peek returns the key value (or undefined if not found) without updating
 // the "recently used"-ness of the key.
 func (c *LRU) Peek(key interface{}) (value interface{}, ok bool) {
-	c.mu.RLock()
-	ent, ok := c.items[key]
-	c.mu.RUnlock()
+	itf, ok := c.items.Load(key)
 	if ok {
-		return ent.value, true
+		return itf.(*entry).value, true
 	}
 	return
 }
@@ -182,15 +174,14 @@ func (c *LRU) Peek(key interface{}) (value interface{}, ok bool) {
 // Remove removes the provided key from the cache, returning if the
 // key was contained.
 func (c *LRU) Remove(key interface{}) (present bool) {
-	c.mu.Lock()
-	ent, ok := c.items[key]
+	itf, ok := c.items.Load(key)
 	if ok {
-		delete(c.items, key)
-		c.mu.Unlock()
-		c.ctl <- action{t: delAction, ele: ent}
-		return true
+		a := action{t: delAction, ele: itf.(*entry), o: make(chan interface{})}
+		c.ctl <- a
+
+		b := <-a.o
+		return b.(bool)
 	}
-	c.mu.Unlock()
 	return false
 }
 
