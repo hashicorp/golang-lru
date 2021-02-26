@@ -123,8 +123,12 @@ func (c *LRU) Len() int {
 func (c *LRU) Add(key, value interface{}) (evicted bool) {
 	itf, ok := c.items.Load(key)
 	if ok {
-		c.ctl <- action{t: hitAction, ele: itf.(*entry)}
-		return false
+		if ent := itf.(*entry); ent.value == value {
+			c.ctl <- action{t: hitAction, ele: ent}
+			return false
+		} else {
+			c.Remove(key)
+		}
 	}
 
 	ent := &entry{key: key, value: value}
