@@ -75,11 +75,7 @@ func (c *LRU) work() {
 			c.items.Delete(act.ele.key)
 			atomic.AddInt32(&c.size, -1)
 
-			if ok {
-				act.o <- true
-			} else {
-				act.o <- false
-			}
+			act.o <- ok
 			c.evictList.Remove(act.ele.element)
 		case oldestAction:
 			act.o <- c.evictList.Back().Value.(*entry)
