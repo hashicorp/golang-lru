@@ -126,9 +126,8 @@ func (c *LRU) Add(key, value interface{}) (evicted bool) {
 		if ent := itf.(*entry); ent.value == value {
 			c.ctl <- action{t: hitAction, ele: ent}
 			return false
-		} else {
-			c.Remove(key)
 		}
+		c.Remove(key)
 	}
 
 	ent := &entry{key: key, value: value}
