@@ -1,90 +1,126 @@
 package lru
 
 import (
+	"errors"
+	"golang-lru/tslru"
+
 	"github.com/hashicorp/golang-lru/simplelru"
-	"github.com/hashicorp/golang-lru/tslru"
+	//"github.com/hashicorp/golang-lru/tslru"
 )
 
 // TSCache is a thread-safe fixed size LRU cache.
 type TSCache struct {
 	// Fragmentation can reduce lock contention, but the hash function affects efficiency
-	lru simplelru.LRUCache
+	lru []simplelru.LRUCache
 }
 
 // NewTSCache creates an LRU of the given size.
-func NewTSCache(size int) (c *TSCache, err error) {
-	// create a cache with default settings
-	lru, err := tslru.NewLRU(size)
-	if err != nil {
-		return nil, err
+// p is set to the number of cpu cores to improve concurrent write performance
+func NewTSCache(size, p int) (c *TSCache, err error) {
+	if p < 1 {
+		return nil, errors.New("p cannot be less than 1.")
 	}
-	return &TSCache{lru: lru}, nil
+	var ts = new(TSCache)
+	for i := 0; i < p; i++ {
+		// create a cache with default settings
+		lru, err := tslru.NewLRU(size)
+		if err != nil {
+			return nil, err
+		}
+		ts.lru = append(ts.lru, lru)
+	}
+	return ts, nil
+}
+
+func (c *TSCache) bucket(key string) simplelru.LRUCache {
+	return c.lru[djb(key)&uint32(len(c.lru)-1)]
 }
 
 // Purge is used to completely clear the cache.
 func (c *TSCache) Purge() {
-	c.lru.Purge()
+	for i := 0; i < len(c.lru); i++ {
+		c.lru[i].Purge()
+	}
 }
 
 // Add adds a value to the cache. Returns true if an eviction occurred.
-func (c *TSCache) Add(key, value interface{}) (evicted bool) {
-	return c.lru.Add(key, value)
+func (c *TSCache) Add(key string, value interface{}) (evicted bool) {
+	return c.bucket(key).Add(key, value)
 }
 
 // Get looks up a key's value from the cache.
-func (c *TSCache) Get(key interface{}) (value interface{}, ok bool) {
-	return c.lru.Get(key)
+func (c *TSCache) Get(key string) (value interface{}, ok bool) {
+	return c.bucket(key).Get(key)
 }
 
 // Contains checks if a key is in the cache, without updating the
 // recent-ness or deleting it for being stale.
-func (c *TSCache) Contains(key interface{}) bool {
-	return c.lru.Contains(key)
+func (c *TSCache) Contains(key string) bool {
+	return c.bucket(key).Contains(key)
 }
 
 // Peek returns the key value (or undefined if not found) without updating
 // the "recently used"-ness of the key.
-func (c *TSCache) Peek(key interface{}) (value interface{}, ok bool) {
-	return c.lru.Peek(key)
+func (c *TSCache) Peek(key string) (value interface{}, ok bool) {
+	return c.bucket(key).Peek(key)
 }
 
 // ContainsOrAdd checks if a key is in the cache without updating the
 // recent-ness or deleting it for being stale, and if not, adds the value.
 // Returns whether found and whether an eviction occurred.
-func (c *TSCache) ContainsOrAdd(key, value interface{}) (ok, evicted bool) {
-	if c.lru.Contains(key) {
+func (c *TSCache) ContainsOrAdd(key string, value interface{}) (ok, evicted bool) {
+	if c.bucket(key).Contains(key) {
 		return true, false
 	}
-	return false, c.lru.Add(key, value)
+	return false, c.bucket(key).Add(key, value)
 }
 
 // PeekOrAdd checks if a key is in the cache without updating the
 // recent-ness or deleting it for being stale, and if not, adds the value.
 // Returns whether found and whether an eviction occurred.
-func (c *TSCache) PeekOrAdd(key, value interface{}) (previous interface{}, ok, evicted bool) {
-	previous, ok = c.lru.Peek(key)
+func (c *TSCache) PeekOrAdd(key string, value interface{}) (previous interface{}, ok, evicted bool) {
+	previous, ok = c.bucket(key).Peek(key)
 	if ok {
 		return previous, true, false
 	}
-	return nil, false, c.lru.Add(key, value)
+	return nil, false, c.bucket(key).Add(key, value)
 }
 
 // Remove removes the provided key from the cache.
-func (c *TSCache) Remove(key interface{}) (present bool) {
-	return c.lru.Remove(key)
+func (c *TSCache) Remove(key string) (present bool) {
+	return c.bucket(key).Remove(key)
 }
 
 // Resize changes the cache size.
 func (c *TSCache) Resize(size int) (evicted int) {
-	return c.lru.Resize(size)
+	for i := 0; i < len(c.lru); i++ {
+		evicted += c.lru[i].Resize(size)
+	}
+	return
 }
 
 // Keys returns a slice of the keys in the cache, from oldest to newest.
-func (c *TSCache) Keys() (ret []interface{}) {
-	return c.lru.Keys()
+func (c *TSCache) Keys() (ret []string) {
+	for i := 0; i < len(c.lru); i++ {
+		for _, k := range c.lru[i].Keys() {
+			ret = append(ret, k.(string))
+		}
+	}
+	return
 }
 
 // Len returns the number of items in the cache.
 func (c *TSCache) Len() (ret int) {
-	return c.lru.Len()
+	for i := 0; i < len(c.lru); i++ {
+		ret += c.lru[i].Len()
+	}
+	return
+}
+
+func djb(key string) uint32 {
+	var h rune = 5381
+	for _, r := range key {
+		h = ((h << 5) + h) + r
+	}
+	return uint32(h)
 }
