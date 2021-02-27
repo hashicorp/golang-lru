@@ -2,10 +2,9 @@ package lru
 
 import (
 	"errors"
-	"golang-lru/tslru"
 
 	"github.com/hashicorp/golang-lru/simplelru"
-	//"github.com/hashicorp/golang-lru/tslru"
+	"github.com/hashicorp/golang-lru/tslru"
 )
 
 // TSCache is a thread-safe fixed size LRU cache.
