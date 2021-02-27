@@ -17,7 +17,7 @@ type TSCache struct {
 // p is set to the number of cpu cores to improve concurrent write performance
 func NewTSCache(size, p int) (c *TSCache, err error) {
 	if p < 1 {
-		return nil, errors.New("p cannot be less than 1.")
+		return nil, errors.New("p cannot be less than 1")
 	}
 	var ts = new(TSCache)
 	for i := 0; i < p; i++ {
