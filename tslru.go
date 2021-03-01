@@ -16,22 +16,38 @@ type TSCache struct {
 // NewTSCache creates an LRU of the given size.
 // p is set to the number of cpu cores to improve concurrent write performance
 func NewTSCache(size, p int) (c *TSCache, err error) {
-	if p < 1 {
+	if p < 1 || size < 1 {
 		return nil, errors.New("p cannot be less than 1")
 	}
+	if size < p {
+		p = size
+	}
+
 	var ts = new(TSCache)
-	for i := 0; i < p; i++ {
+	ts.lru = make([]simplelru.LRUCache, p)
+
+	for i := 1; i < p; i++ {
 		// create a cache with default settings
-		lru, err := tslru.NewLRU(size)
+		lru, err := tslru.NewLRU(size / p)
 		if err != nil {
 			return nil, err
 		}
-		ts.lru = append(ts.lru, lru)
+		ts.lru[i] = lru
 	}
+
+	lru, err := tslru.NewLRU(size/p + size%p)
+	if err != nil {
+		return nil, err
+	}
+	ts.lru[0] = lru
+
 	return ts, nil
 }
 
 func (c *TSCache) bucket(key string) simplelru.LRUCache {
+	if len(c.lru) == 1 {
+		return c.lru[0]
+	}
 	return c.lru[djb(key)&uint32(len(c.lru)-1)]
 }
 
