@@ -80,7 +80,7 @@ func (c *LRU) work() {
 		case oldestAction:
 			act.o <- c.evictList.Back().Value.(*entry)
 		case iterAction:
-			for ele := c.evictList.Back(); ele != nil && ele != c.evictList.Front(); ele = ele.Prev() {
+			for ele := c.evictList.Back(); ele != nil; ele = ele.Prev() {
 				act.o <- ele.Value.(*entry).key
 			}
 			close(act.o)
@@ -145,7 +145,7 @@ func (c *LRU) Get(key interface{}) (value interface{}, ok bool) {
 		ent := itf.(*entry)
 		select {
 		case c.ctl <- action{t: hitAction, ele: ent}:
-		default:
+			// default:
 			// log
 		}
 		return ent.value, true
