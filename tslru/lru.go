@@ -143,11 +143,7 @@ func (c *LRU) Get(key interface{}) (value interface{}, ok bool) {
 	itf, ok := c.items.Load(key)
 	if ok {
 		ent := itf.(*entry)
-		select {
-		case c.ctl <- action{t: hitAction, ele: ent}:
-			// default:
-			// log
-		}
+		c.ctl <- action{t: hitAction, ele: ent}
 		return ent.value, true
 	}
 	return
