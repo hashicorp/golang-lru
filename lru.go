@@ -222,6 +222,14 @@ func (c *Cache) Keys() []interface{} {
 	return keys
 }
 
+// Values returns a slice of the values in the cache, from oldest to newest.
+func (c *Cache) Values() []interface{} {
+	c.lock.RLock()
+	values := c.lru.Values()
+	c.lock.RUnlock()
+	return values
+}
+
 // Len returns the number of items in the cache.
 func (c *Cache) Len() int {
 	c.lock.RLock()

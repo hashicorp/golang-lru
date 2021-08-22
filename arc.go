@@ -208,6 +208,15 @@ func (c *ARCCache) Keys() []interface{} {
 	return append(k1, k2...)
 }
 
+// Values returns all the cached values
+func (c *ARCCache) Values() []interface{} {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	v1 := c.t1.Values()
+	v2 := c.t2.Values()
+	return append(v1, v2...)
+}
+
 // Remove is used to purge a key from the cache
 func (c *ARCCache) Remove(key interface{}) {
 	c.lock.Lock()

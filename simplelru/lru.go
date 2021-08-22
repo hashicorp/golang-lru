@@ -140,6 +140,17 @@ func (c *LRU) Keys() []interface{} {
 	return keys
 }
 
+// Values returns a slice of the values in the cache, from oldest to newest.
+func (c *LRU) Values() []interface{} {
+	values := make([]interface{}, len(c.items))
+	i := 0
+	for ent := c.evictList.Back(); ent != nil; ent = ent.Prev() {
+		values[i] = ent.Value.(*entry).value
+		i++
+	}
+	return values
+}
+
 // Len returns the number of items in the cache.
 func (c *LRU) Len() int {
 	return c.evictList.Len()

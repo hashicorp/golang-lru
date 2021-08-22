@@ -29,6 +29,9 @@ type LRUCache interface {
 	// Returns a slice of the keys in the cache, from oldest to newest.
 	Keys() []interface{}
 
+	// Values returns a slice of the values in the cache, from oldest to newest.
+	Values() []interface{}
+
 	// Returns the number of items in the cache.
 	Len() int
 

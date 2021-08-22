@@ -95,6 +95,11 @@ func TestLRU(t *testing.T) {
 			t.Fatalf("bad key: %v", k)
 		}
 	}
+	for i, v := range l.Values() {
+		if v != i+128 {
+			t.Fatalf("bad value: %v", v)
+		}
+	}
 	for i := 0; i < 128; i++ {
 		_, ok := l.Get(i)
 		if ok {
