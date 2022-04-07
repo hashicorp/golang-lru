@@ -11,7 +11,7 @@ func init() {
 }
 
 func BenchmarkARC_Rand(b *testing.B) {
-	l, err := NewARC(8192)
+	l, err := NewARC[int64, int64](8192)
 	if err != nil {
 		b.Fatalf("err: %v", err)
 	}
@@ -40,7 +40,7 @@ func BenchmarkARC_Rand(b *testing.B) {
 }
 
 func BenchmarkARC_Freq(b *testing.B) {
-	l, err := NewARC(8192)
+	l, err := NewARC[int64, int64](8192)
 	if err != nil {
 		b.Fatalf("err: %v", err)
 	}
@@ -73,7 +73,7 @@ func BenchmarkARC_Freq(b *testing.B) {
 
 func TestARC_RandomOps(t *testing.T) {
 	size := 128
-	l, err := NewARC(128)
+	l, err := NewARC[int64, int64](128)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestARC_RandomOps(t *testing.T) {
 }
 
 func TestARC_Get_RecentToFrequent(t *testing.T) {
-	l, err := NewARC(128)
+	l, err := NewARC[int, int](128)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -149,7 +149,7 @@ func TestARC_Get_RecentToFrequent(t *testing.T) {
 }
 
 func TestARC_Add_RecentToFrequent(t *testing.T) {
-	l, err := NewARC(128)
+	l, err := NewARC[int, int](128)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -183,7 +183,7 @@ func TestARC_Add_RecentToFrequent(t *testing.T) {
 }
 
 func TestARC_Adaptive(t *testing.T) {
-	l, err := NewARC(4)
+	l, err := NewARC[int, int](4)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -292,7 +292,7 @@ func TestARC_Adaptive(t *testing.T) {
 }
 
 func TestARC(t *testing.T) {
-	l, err := NewARC(128)
+	l, err := NewARC[int, int](128)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -340,7 +340,7 @@ func TestARC(t *testing.T) {
 
 // Test that Contains doesn't update recent-ness
 func TestARC_Contains(t *testing.T) {
-	l, err := NewARC(2)
+	l, err := NewARC[int, int](2)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -359,7 +359,7 @@ func TestARC_Contains(t *testing.T) {
 
 // Test that Peek doesn't update recent-ness
 func TestARC_Peek(t *testing.T) {
-	l, err := NewARC(2)
+	l, err := NewARC[int, int](2)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
