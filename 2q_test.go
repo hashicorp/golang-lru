@@ -94,15 +94,13 @@ func Test2Q_RandomOps(t *testing.T) {
 }
 
 func Test2Q_Get_RecentToFrequent(t *testing.T) {
-	l, err := New2Q[int64, int64](128)
+	l, err := New2Q[int, int](128)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
 
-	var i int64
-
 	// Touch all the entries, should be in t1
-	for i = 0; i < 128; i++ {
+	for i := 0; i < 128; i++ {
 		l.Add(i, i)
 	}
 	if n := l.recent.Len(); n != 128 {
@@ -113,7 +111,7 @@ func Test2Q_Get_RecentToFrequent(t *testing.T) {
 	}
 
 	// Get should upgrade to t2
-	for i = 0; i < 128; i++ {
+	for i := 0; i < 128; i++ {
 		_, ok := l.Get(i)
 		if !ok {
 			t.Fatalf("missing: %d", i)
@@ -127,7 +125,7 @@ func Test2Q_Get_RecentToFrequent(t *testing.T) {
 	}
 
 	// Get be from t2
-	for i = 0; i < 128; i++ {
+	for i := 0; i < 128; i++ {
 		_, ok := l.Get(i)
 		if !ok {
 			t.Fatalf("missing: %d", i)
