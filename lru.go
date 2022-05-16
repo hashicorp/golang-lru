@@ -3,7 +3,7 @@ package lru
 import (
 	"sync"
 
-	"github.com/descope/golang-lru/simplelru"
+	"github.com/hashicorp/golang-lru/simplelru"
 )
 
 const (
