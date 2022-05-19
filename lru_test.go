@@ -291,3 +291,36 @@ func TestLRUResize(t *testing.T) {
 		t.Errorf("Cache should have contained 2 elements")
 	}
 }
+
+// test that AddOrUpdate calls the update method
+func TestLRUAddOrUpdate(t *testing.T) {
+	l, err := New(2)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	value1 := []string{"some_value"}
+	value2 := []string{"some_value_2"}
+
+	l.Add(1, value1)
+	l.AddOrUpdate(1, value2, func(v1, v2 interface{}) interface{} {
+		slice1 := v1.([]string)
+		slice2 := v2.([]string)
+		return append(slice1, slice2...)
+	})
+
+	retrieved, ok := l.Get(1)
+	if !ok {
+		t.Fatalf("Cache should contain the element")
+	}
+	retrievedSlice := retrieved.([]string)
+	if len(retrievedSlice) != 2 {
+		t.Fatalf("The retrieved slice should contain 2 elements")
+	}
+	if retrievedSlice[0] != "some_value" {
+		t.Fatalf("The first element should be some_value")
+	}
+	if retrievedSlice[1] != "some_value_2" {
+		t.Fatalf("The second element should be some_value_2")
+	}
+}
