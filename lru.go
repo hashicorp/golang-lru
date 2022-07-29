@@ -14,8 +14,8 @@ const (
 // Cache is a thread-safe fixed size LRU cache.
 type Cache struct {
 	lru                      *simplelru.LRU
-	evictedKeys, evictedVals []interface{}
-	onEvictedCB              func(k, v interface{})
+	evictedKeys, evictedVals []any
+	onEvictedCB              func(k, v any)
 	lock                     sync.RWMutex
 }
 
@@ -26,7 +26,7 @@ func New(size int) (*Cache, error) {
 
 // NewWithEvict constructs a fixed size cache with the given eviction
 // callback.
-func NewWithEvict(size int, onEvicted func(key, value interface{})) (c *Cache, err error) {
+func NewWithEvict(size int, onEvicted func(key, value any)) (c *Cache, err error) {
 	// create a cache with default settings
 	c = &Cache{
 		onEvictedCB: onEvicted,
@@ -40,20 +40,20 @@ func NewWithEvict(size int, onEvicted func(key, value interface{})) (c *Cache, e
 }
 
 func (c *Cache) initEvictBuffers() {
-	c.evictedKeys = make([]interface{}, 0, DefaultEvictedBufferSize)
-	c.evictedVals = make([]interface{}, 0, DefaultEvictedBufferSize)
+	c.evictedKeys = make([]any, 0, DefaultEvictedBufferSize)
+	c.evictedVals = make([]any, 0, DefaultEvictedBufferSize)
 }
 
 // onEvicted save evicted key/val and sent in externally registered callback
 // outside of critical section
-func (c *Cache) onEvicted(k, v interface{}) {
+func (c *Cache) onEvicted(k, v any) {
 	c.evictedKeys = append(c.evictedKeys, k)
 	c.evictedVals = append(c.evictedVals, v)
 }
 
 // Purge is used to completely clear the cache.
 func (c *Cache) Purge() {
-	var ks, vs []interface{}
+	var ks, vs []any
 	c.lock.Lock()
 	c.lru.Purge()
 	if c.onEvictedCB != nil && len(c.evictedKeys) > 0 {
@@ -70,8 +70,8 @@ func (c *Cache) Purge() {
 }
 
 // Add adds a value to the cache. Returns true if an eviction occurred.
-func (c *Cache) Add(key, value interface{}) (evicted bool) {
-	var k, v interface{}
+func (c *Cache) Add(key, value any) (evicted bool) {
+	var k, v any
 	c.lock.Lock()
 	evicted = c.lru.Add(key, value)
 	if c.onEvictedCB != nil && evicted {
@@ -86,7 +86,7 @@ func (c *Cache) Add(key, value interface{}) (evicted bool) {
 }
 
 // Get looks up a key's value from the cache.
-func (c *Cache) Get(key interface{}) (value interface{}, ok bool) {
+func (c *Cache) Get(key any) (value any, ok bool) {
 	c.lock.Lock()
 	value, ok = c.lru.Get(key)
 	c.lock.Unlock()
@@ -95,7 +95,7 @@ func (c *Cache) Get(key interface{}) (value interface{}, ok bool) {
 
 // Contains checks if a key is in the cache, without updating the
 // recent-ness or deleting it for being stale.
-func (c *Cache) Contains(key interface{}) bool {
+func (c *Cache) Contains(key any) bool {
 	c.lock.RLock()
 	containKey := c.lru.Contains(key)
 	c.lock.RUnlock()
@@ -104,7 +104,7 @@ func (c *Cache) Contains(key interface{}) bool {
 
 // Peek returns the key value (or undefined if not found) without updating
 // the "recently used"-ness of the key.
-func (c *Cache) Peek(key interface{}) (value interface{}, ok bool) {
+func (c *Cache) Peek(key any) (value any, ok bool) {
 	c.lock.RLock()
 	value, ok = c.lru.Peek(key)
 	c.lock.RUnlock()
@@ -114,8 +114,8 @@ func (c *Cache) Peek(key interface{}) (value interface{}, ok bool) {
 // ContainsOrAdd checks if a key is in the cache without updating the
 // recent-ness or deleting it for being stale, and if not, adds the value.
 // Returns whether found and whether an eviction occurred.
-func (c *Cache) ContainsOrAdd(key, value interface{}) (ok, evicted bool) {
-	var k, v interface{}
+func (c *Cache) ContainsOrAdd(key, value any) (ok, evicted bool) {
+	var k, v any
 	c.lock.Lock()
 	if c.lru.Contains(key) {
 		c.lock.Unlock()
@@ -136,8 +136,8 @@ func (c *Cache) ContainsOrAdd(key, value interface{}) (ok, evicted bool) {
 // PeekOrAdd checks if a key is in the cache without updating the
 // recent-ness or deleting it for being stale, and if not, adds the value.
 // Returns whether found and whether an eviction occurred.
-func (c *Cache) PeekOrAdd(key, value interface{}) (previous interface{}, ok, evicted bool) {
-	var k, v interface{}
+func (c *Cache) PeekOrAdd(key, value any) (previous any, ok, evicted bool) {
+	var k, v any
 	c.lock.Lock()
 	previous, ok = c.lru.Peek(key)
 	if ok {
@@ -157,8 +157,8 @@ func (c *Cache) PeekOrAdd(key, value interface{}) (previous interface{}, ok, evi
 }
 
 // Remove removes the provided key from the cache.
-func (c *Cache) Remove(key interface{}) (present bool) {
-	var k, v interface{}
+func (c *Cache) Remove(key any) (present bool) {
+	var k, v any
 	c.lock.Lock()
 	present = c.lru.Remove(key)
 	if c.onEvictedCB != nil && present {
@@ -174,7 +174,7 @@ func (c *Cache) Remove(key interface{}) (present bool) {
 
 // Resize changes the cache size.
 func (c *Cache) Resize(size int) (evicted int) {
-	var ks, vs []interface{}
+	var ks, vs []any
 	c.lock.Lock()
 	evicted = c.lru.Resize(size)
 	if c.onEvictedCB != nil && evicted > 0 {
@@ -191,8 +191,8 @@ func (c *Cache) Resize(size int) (evicted int) {
 }
 
 // RemoveOldest removes the oldest item from the cache.
-func (c *Cache) RemoveOldest() (key, value interface{}, ok bool) {
-	var k, v interface{}
+func (c *Cache) RemoveOldest() (key, value any, ok bool) {
+	var k, v any
 	c.lock.Lock()
 	key, value, ok = c.lru.RemoveOldest()
 	if c.onEvictedCB != nil && ok {
@@ -207,7 +207,7 @@ func (c *Cache) RemoveOldest() (key, value interface{}, ok bool) {
 }
 
 // GetOldest returns the oldest entry
-func (c *Cache) GetOldest() (key, value interface{}, ok bool) {
+func (c *Cache) GetOldest() (key, value any, ok bool) {
 	c.lock.RLock()
 	key, value, ok = c.lru.GetOldest()
 	c.lock.RUnlock()
@@ -215,7 +215,7 @@ func (c *Cache) GetOldest() (key, value interface{}, ok bool) {
 }
 
 // Keys returns a slice of the keys in the cache, from oldest to newest.
-func (c *Cache) Keys() []interface{} {
+func (c *Cache) Keys() []any {
 	c.lock.RLock()
 	keys := c.lru.Keys()
 	c.lock.RUnlock()

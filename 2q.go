@@ -85,7 +85,7 @@ func New2QParams(size int, recentRatio, ghostRatio float64) (*TwoQueueCache, err
 }
 
 // Get looks up a key's value from the cache.
-func (c *TwoQueueCache) Get(key interface{}) (value interface{}, ok bool) {
+func (c *TwoQueueCache) Get(key any) (value any, ok bool) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -107,7 +107,7 @@ func (c *TwoQueueCache) Get(key interface{}) (value interface{}, ok bool) {
 }
 
 // Add adds a value to the cache.
-func (c *TwoQueueCache) Add(key, value interface{}) {
+func (c *TwoQueueCache) Add(key, value any) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -170,7 +170,7 @@ func (c *TwoQueueCache) Len() int {
 
 // Keys returns a slice of the keys in the cache.
 // The frequently used keys are first in the returned slice.
-func (c *TwoQueueCache) Keys() []interface{} {
+func (c *TwoQueueCache) Keys() []any {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	k1 := c.frequent.Keys()
@@ -179,7 +179,7 @@ func (c *TwoQueueCache) Keys() []interface{} {
 }
 
 // Remove removes the provided key from the cache.
-func (c *TwoQueueCache) Remove(key interface{}) {
+func (c *TwoQueueCache) Remove(key any) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	if c.frequent.Remove(key) {
@@ -204,7 +204,7 @@ func (c *TwoQueueCache) Purge() {
 
 // Contains is used to check if the cache contains a key
 // without updating recency or frequency.
-func (c *TwoQueueCache) Contains(key interface{}) bool {
+func (c *TwoQueueCache) Contains(key any) bool {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	return c.frequent.Contains(key) || c.recent.Contains(key)
@@ -212,7 +212,7 @@ func (c *TwoQueueCache) Contains(key interface{}) bool {
 
 // Peek is used to inspect the cache value of a key
 // without updating recency or frequency.
-func (c *TwoQueueCache) Peek(key interface{}) (value interface{}, ok bool) {
+func (c *TwoQueueCache) Peek(key any) (value any, ok bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	if val, ok := c.frequent.Peek(key); ok {

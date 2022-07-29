@@ -4,7 +4,7 @@ import "testing"
 
 func TestLRU(t *testing.T) {
 	evictCounter := 0
-	onEvicted := func(k interface{}, v interface{}) {
+	onEvicted := func(k any, v any) {
 		if k != v {
 			t.Fatalf("Evict values not equal (%v!=%v)", k, v)
 		}
@@ -111,7 +111,7 @@ func TestLRU_GetOldest_RemoveOldest(t *testing.T) {
 // Test that Add returns true/false if an eviction occurred
 func TestLRU_Add(t *testing.T) {
 	evictCounter := 0
-	onEvicted := func(k interface{}, v interface{}) {
+	onEvicted := func(k any, v any) {
 		evictCounter++
 	}
 
@@ -169,7 +169,7 @@ func TestLRU_Peek(t *testing.T) {
 // Test that Resize can upsize and downsize
 func TestLRU_Resize(t *testing.T) {
 	onEvictCounter := 0
-	onEvicted := func(k interface{}, v interface{}) {
+	onEvicted := func(k any, v any) {
 		onEvictCounter++
 	}
 	l, err := NewLRU(2, onEvicted)

@@ -68,7 +68,7 @@ func BenchmarkLRU_Freq(b *testing.B) {
 
 func TestLRU(t *testing.T) {
 	evictCounter := 0
-	onEvicted := func(k interface{}, v interface{}) {
+	onEvicted := func(k any, v any) {
 		if k != v {
 			t.Fatalf("Evict values not equal (%v!=%v)", k, v)
 		}
@@ -135,7 +135,7 @@ func TestLRU(t *testing.T) {
 // test that Add returns true/false if an eviction occurred
 func TestLRUAdd(t *testing.T) {
 	evictCounter := 0
-	onEvicted := func(k interface{}, v interface{}) {
+	onEvicted := func(k any, v any) {
 		evictCounter++
 	}
 
@@ -256,7 +256,7 @@ func TestLRUPeek(t *testing.T) {
 // test that Resize can upsize and downsize
 func TestLRUResize(t *testing.T) {
 	onEvictCounter := 0
-	onEvicted := func(k interface{}, v interface{}) {
+	onEvicted := func(k any, v any) {
 		onEvictCounter++
 	}
 	l, err := NewWithEvict(2, onEvicted)
