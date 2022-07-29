@@ -2,39 +2,39 @@
 package simplelru
 
 // LRUCache is the interface for simple LRU cache.
-type LRUCache interface {
-	// Adds a value to the cache, returns true if an eviction occurred and
+type LRUCache[K comparable] interface {
+	// Add adds a value to the cache, returns true if an eviction occurred and
 	// updates the "recently used"-ness of the key.
-	Add(key, value any) bool
+	Add(key K, value any) bool
 
-	// Returns key's value from the cache and
+	// Get returns key's value from the cache and
 	// updates the "recently used"-ness of the key. #value, isFound
-	Get(key any) (value any, ok bool)
+	Get(key K) (value any, ok bool)
 
-	// Checks if a key exists in cache without updating the recent-ness.
-	Contains(key any) (ok bool)
+	// Contains checks if a key exists in cache without updating the recent-ness.
+	Contains(key K) (ok bool)
 
-	// Returns key's value without updating the "recently used"-ness of the key.
-	Peek(key any) (value any, ok bool)
+	// Peek returns key's value without updating the "recently used"-ness of the key.
+	Peek(key K) (value any, ok bool)
 
-	// Removes a key from the cache.
-	Remove(key any) bool
+	// Remove removes a key from the cache.
+	Remove(key K) bool
 
-	// Removes the oldest entry from cache.
-	RemoveOldest() (any, any, bool)
+	// RemoveOldest removes the oldest entry from cache.
+	RemoveOldest() (K, any, bool)
 
-	// Returns the oldest entry from the cache. #key, value, isFound
-	GetOldest() (any, any, bool)
+	// GetOldest returns the oldest entry from the cache. #key, value, isFound
+	GetOldest() (K, any, bool)
 
-	// Returns a slice of the keys in the cache, from oldest to newest.
-	Keys() []any
+	// Keys returns a slice of the keys in the cache, from oldest to newest.
+	Keys() []K
 
-	// Returns the number of items in the cache.
+	// Len returns the number of items in the cache.
 	Len() int
 
-	// Clears all cache entries.
+	// Purge clears all cache entries.
 	Purge()
 
-	// Resizes cache, returning number evicted
+	// Resize resizes cache, returning number evicted
 	Resize(int) int
 }
