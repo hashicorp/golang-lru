@@ -6,7 +6,7 @@ import (
 )
 
 func BenchmarkLRU_Rand(b *testing.B) {
-	l, err := New[int64](8192)
+	l, err := New[int64, int64](8192)
 	if err != nil {
 		b.Fatalf("err: %v", err)
 	}
@@ -35,7 +35,7 @@ func BenchmarkLRU_Rand(b *testing.B) {
 }
 
 func BenchmarkLRU_Freq(b *testing.B) {
-	l, err := New[int64](8192)
+	l, err := New[int64, int64](8192)
 	if err != nil {
 		b.Fatalf("err: %v", err)
 	}
@@ -68,13 +68,13 @@ func BenchmarkLRU_Freq(b *testing.B) {
 
 func TestLRU(t *testing.T) {
 	evictCounter := 0
-	onEvicted := func(k int, v any) {
+	onEvicted := func(k int, v int) {
 		if k != v {
 			t.Fatalf("Evict values not equal (%v!=%v)", k, v)
 		}
 		evictCounter++
 	}
-	l, err := NewWithEvict[int](128, onEvicted)
+	l, err := NewWithEvict[int, int](128, onEvicted)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -135,11 +135,11 @@ func TestLRU(t *testing.T) {
 // test that Add returns true/false if an eviction occurred
 func TestLRUAdd(t *testing.T) {
 	evictCounter := 0
-	onEvicted := func(k int, v any) {
+	onEvicted := func(k int, v int) {
 		evictCounter++
 	}
 
-	l, err := NewWithEvict[int](1, onEvicted)
+	l, err := NewWithEvict[int, int](1, onEvicted)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -154,7 +154,7 @@ func TestLRUAdd(t *testing.T) {
 
 // test that Contains doesn't update recent-ness
 func TestLRUContains(t *testing.T) {
-	l, err := New[int](2)
+	l, err := New[int, int](2)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -173,7 +173,7 @@ func TestLRUContains(t *testing.T) {
 
 // test that ContainsOrAdd doesn't update recent-ness
 func TestLRUContainsOrAdd(t *testing.T) {
-	l, err := New[int](2)
+	l, err := New[int, int](2)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -203,7 +203,7 @@ func TestLRUContainsOrAdd(t *testing.T) {
 
 // test that PeekOrAdd doesn't update recent-ness
 func TestLRUPeekOrAdd(t *testing.T) {
-	l, err := New[int](2)
+	l, err := New[int, int](2)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -236,7 +236,7 @@ func TestLRUPeekOrAdd(t *testing.T) {
 
 // test that Peek doesn't update recent-ness
 func TestLRUPeek(t *testing.T) {
-	l, err := New[int](2)
+	l, err := New[int, int](2)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -256,10 +256,10 @@ func TestLRUPeek(t *testing.T) {
 // test that Resize can upsize and downsize
 func TestLRUResize(t *testing.T) {
 	onEvictCounter := 0
-	onEvicted := func(k int, v any) {
+	onEvicted := func(k int, v int) {
 		onEvictCounter++
 	}
-	l, err := NewWithEvict[int](2, onEvicted)
+	l, err := NewWithEvict[int, int](2, onEvicted)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
