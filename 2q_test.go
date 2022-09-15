@@ -1,3 +1,6 @@
+//go:build go1.18
+// +build go1.18
+
 package lru
 
 import (
@@ -6,7 +9,7 @@ import (
 )
 
 func Benchmark2Q_Rand(b *testing.B) {
-	l, err := New2Q(8192)
+	l, err := New2Q[int64, int64](8192)
 	if err != nil {
 		b.Fatalf("err: %v", err)
 	}
@@ -35,7 +38,7 @@ func Benchmark2Q_Rand(b *testing.B) {
 }
 
 func Benchmark2Q_Freq(b *testing.B) {
-	l, err := New2Q(8192)
+	l, err := New2Q[int64, int64](8192)
 	if err != nil {
 		b.Fatalf("err: %v", err)
 	}
@@ -68,7 +71,7 @@ func Benchmark2Q_Freq(b *testing.B) {
 
 func Test2Q_RandomOps(t *testing.T) {
 	size := 128
-	l, err := New2Q(128)
+	l, err := New2Q[int64, int64](128)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -94,7 +97,7 @@ func Test2Q_RandomOps(t *testing.T) {
 }
 
 func Test2Q_Get_RecentToFrequent(t *testing.T) {
-	l, err := New2Q(128)
+	l, err := New2Q[int, int](128)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -140,7 +143,7 @@ func Test2Q_Get_RecentToFrequent(t *testing.T) {
 }
 
 func Test2Q_Add_RecentToFrequent(t *testing.T) {
-	l, err := New2Q(128)
+	l, err := New2Q[int, int](128)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -174,7 +177,7 @@ func Test2Q_Add_RecentToFrequent(t *testing.T) {
 }
 
 func Test2Q_Add_RecentEvict(t *testing.T) {
-	l, err := New2Q(4)
+	l, err := New2Q[int, int](4)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -221,7 +224,7 @@ func Test2Q_Add_RecentEvict(t *testing.T) {
 }
 
 func Test2Q(t *testing.T) {
-	l, err := New2Q(128)
+	l, err := New2Q[int, int](128)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -269,7 +272,7 @@ func Test2Q(t *testing.T) {
 
 // Test that Contains doesn't update recent-ness
 func Test2Q_Contains(t *testing.T) {
-	l, err := New2Q(2)
+	l, err := New2Q[int, int](2)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -288,7 +291,7 @@ func Test2Q_Contains(t *testing.T) {
 
 // Test that Peek doesn't update recent-ness
 func Test2Q_Peek(t *testing.T) {
-	l, err := New2Q(2)
+	l, err := New2Q[int, int](2)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
