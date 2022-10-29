@@ -1,9 +1,19 @@
 package lru
 
 import (
-	"math/rand"
+	"crypto/rand"
+	"math"
+	"math/big"
 	"testing"
 )
+
+func getRand(tb testing.TB) int64 {
+	out, err := rand.Int(rand.Reader, big.NewInt(math.MaxInt64))
+	if err != nil {
+		tb.Fatal(err)
+	}
+	return out.Int64()
+}
 
 func Benchmark2Q_Rand(b *testing.B) {
 	l, err := New2Q(8192)
@@ -13,7 +23,7 @@ func Benchmark2Q_Rand(b *testing.B) {
 
 	trace := make([]int64, b.N*2)
 	for i := 0; i < b.N*2; i++ {
-		trace[i] = rand.Int63() % 32768
+		trace[i] = getRand(b) % 32768
 	}
 
 	b.ResetTimer()
@@ -43,9 +53,9 @@ func Benchmark2Q_Freq(b *testing.B) {
 	trace := make([]int64, b.N*2)
 	for i := 0; i < b.N*2; i++ {
 		if i%2 == 0 {
-			trace[i] = rand.Int63() % 16384
+			trace[i] = getRand(b) % 16384
 		} else {
-			trace[i] = rand.Int63() % 32768
+			trace[i] = getRand(b) % 32768
 		}
 	}
 
@@ -75,8 +85,8 @@ func Test2Q_RandomOps(t *testing.T) {
 
 	n := 200000
 	for i := 0; i < n; i++ {
-		key := rand.Int63() % 512
-		r := rand.Int63()
+		key := getRand(t) % 512
+		r := getRand(t)
 		switch r % 3 {
 		case 0:
 			l.Add(key, key)
