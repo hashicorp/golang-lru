@@ -1,7 +1,6 @@
 package lru
 
 import (
-	"math/rand"
 	"testing"
 )
 
@@ -13,7 +12,7 @@ func BenchmarkLRU_Rand(b *testing.B) {
 
 	trace := make([]int64, b.N*2)
 	for i := 0; i < b.N*2; i++ {
-		trace[i] = rand.Int63() % 32768
+		trace[i] = getRand(b) % 32768
 	}
 
 	b.ResetTimer()
@@ -43,9 +42,9 @@ func BenchmarkLRU_Freq(b *testing.B) {
 	trace := make([]int64, b.N*2)
 	for i := 0; i < b.N*2; i++ {
 		if i%2 == 0 {
-			trace[i] = rand.Int63() % 16384
+			trace[i] = getRand(b) % 16384
 		} else {
-			trace[i] = rand.Int63() % 32768
+			trace[i] = getRand(b) % 32768
 		}
 	}
 
