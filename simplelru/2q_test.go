@@ -1,6 +1,7 @@
-package lru
+package simplelru
 
 import (
+	"math/rand"
 	"testing"
 )
 
@@ -12,7 +13,7 @@ func Benchmark2Q_Rand(b *testing.B) {
 
 	trace := make([]int64, b.N*2)
 	for i := 0; i < b.N*2; i++ {
-		trace[i] = getRand(b) % 32768
+		trace[i] = rand.Int63() % 32768
 	}
 
 	b.ResetTimer()
@@ -42,9 +43,9 @@ func Benchmark2Q_Freq(b *testing.B) {
 	trace := make([]int64, b.N*2)
 	for i := 0; i < b.N*2; i++ {
 		if i%2 == 0 {
-			trace[i] = getRand(b) % 16384
+			trace[i] = rand.Int63() % 16384
 		} else {
-			trace[i] = getRand(b) % 32768
+			trace[i] = rand.Int63() % 32768
 		}
 	}
 
@@ -74,8 +75,8 @@ func Test2Q_RandomOps(t *testing.T) {
 
 	n := 200000
 	for i := 0; i < n; i++ {
-		key := getRand(t) % 512
-		r := getRand(t)
+		key := rand.Int63() % 512
+		r := rand.Int63()
 		switch r % 3 {
 		case 0:
 			l.Add(key, key)
@@ -85,10 +86,137 @@ func Test2Q_RandomOps(t *testing.T) {
 			l.Remove(key)
 		}
 
-		if l.Len() > size {
-			t.Fatalf("bad: expected %d, got %d",
-				size, l.Len())
+		if l.recent.Len()+l.frequent.Len() > size {
+			t.Fatalf("bad: recent: %d freq: %d",
+				l.recent.Len(), l.frequent.Len())
 		}
+	}
+}
+
+func Test2Q_Get_RecentToFrequent(t *testing.T) {
+	l, err := New2Q(128)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	// Touch all the entries, should be in t1
+	for i := 0; i < 128; i++ {
+		l.Add(i, i)
+	}
+	if n := l.recent.Len(); n != 128 {
+		t.Fatalf("bad: %d", n)
+	}
+	if n := l.frequent.Len(); n != 0 {
+		t.Fatalf("bad: %d", n)
+	}
+
+	// Get should upgrade to t2
+	for i := 0; i < 128; i++ {
+		_, ok := l.Get(i)
+		if !ok {
+			t.Fatalf("missing: %d", i)
+		}
+	}
+	if n := l.recent.Len(); n != 0 {
+		t.Fatalf("bad: %d", n)
+	}
+	if n := l.frequent.Len(); n != 128 {
+		t.Fatalf("bad: %d", n)
+	}
+
+	// Get be from t2
+	for i := 0; i < 128; i++ {
+		_, ok := l.Get(i)
+		if !ok {
+			t.Fatalf("missing: %d", i)
+		}
+	}
+	if n := l.recent.Len(); n != 0 {
+		t.Fatalf("bad: %d", n)
+	}
+	if n := l.frequent.Len(); n != 128 {
+		t.Fatalf("bad: %d", n)
+	}
+}
+
+func Test2Q_Add_RecentToFrequent(t *testing.T) {
+	l, err := New2Q(128)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	// Add initially to recent
+	l.Add(1, 1)
+	if n := l.recent.Len(); n != 1 {
+		t.Fatalf("bad: %d", n)
+	}
+	if n := l.frequent.Len(); n != 0 {
+		t.Fatalf("bad: %d", n)
+	}
+
+	// Add should upgrade to frequent
+	l.Add(1, 1)
+	if n := l.recent.Len(); n != 0 {
+		t.Fatalf("bad: %d", n)
+	}
+	if n := l.frequent.Len(); n != 1 {
+		t.Fatalf("bad: %d", n)
+	}
+
+	// Add should remain in frequent
+	l.Add(1, 1)
+	if n := l.recent.Len(); n != 0 {
+		t.Fatalf("bad: %d", n)
+	}
+	if n := l.frequent.Len(); n != 1 {
+		t.Fatalf("bad: %d", n)
+	}
+}
+
+func Test2Q_Add_RecentEvict(t *testing.T) {
+	l, err := New2Q(4)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	// Add 1,2,3,4,5 -> Evict 1
+	l.Add(1, 1)
+	l.Add(2, 2)
+	l.Add(3, 3)
+	l.Add(4, 4)
+	l.Add(5, 5)
+	if n := l.recent.Len(); n != 4 {
+		t.Fatalf("bad: %d", n)
+	}
+	if n := l.recentEvict.Len(); n != 1 {
+		t.Fatalf("bad: %d", n)
+	}
+	if n := l.frequent.Len(); n != 0 {
+		t.Fatalf("bad: %d", n)
+	}
+
+	// Pull in the recently evicted
+	l.Add(1, 1)
+	if n := l.recent.Len(); n != 3 {
+		t.Fatalf("bad: %d", n)
+	}
+	if n := l.recentEvict.Len(); n != 1 {
+		t.Fatalf("bad: %d", n)
+	}
+	if n := l.frequent.Len(); n != 1 {
+		t.Fatalf("bad: %d", n)
+	}
+
+	// Add 6, should cause another recent evict
+	l.Add(6, 6)
+	if n := l.recent.Len(); n != 3 {
+		t.Fatalf("bad: %d", n)
+	}
+	if n := l.recentEvict.Len(); n != 2 {
+		t.Fatalf("bad: %d", n)
+	}
+	if n := l.frequent.Len(); n != 1 {
+		t.Fatalf("bad: %d", n)
 	}
 }
 

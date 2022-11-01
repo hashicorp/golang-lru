@@ -23,3 +23,25 @@ if l.Len() != 128 {
     panic(fmt.Sprintf("bad len: %v", l.Len()))
 }
 ```
+
+Or use expiring caches as following:
+
+```go
+const EntryLifeTime = time.Minute
+cache, _ := NewExpiringLRU(128, EntryLifeTime)
+for i := 1; i < 256; i++ {
+    cache.Add(i, nil)
+}
+// and run a background goroutine to clean up expired entries aggressively
+go func() {
+	LOOP:
+		for {
+			select {
+			case <-shutdown:
+				break LOOP
+			case <-time.Tick(EntryLifeTime):
+				cache.RemoveAllExpired()
+			}
+		}
+}()
+```
