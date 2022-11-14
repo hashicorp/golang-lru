@@ -22,8 +22,7 @@ func BenchmarkLRU_Rand(b *testing.B) {
 		if i%2 == 0 {
 			l.Add(trace[i], trace[i])
 		} else {
-			_, ok := l.Get(trace[i])
-			if ok {
+			if _, ok := l.Get(trace[i]); ok {
 				hit++
 			} else {
 				miss++
@@ -55,8 +54,7 @@ func BenchmarkLRU_Freq(b *testing.B) {
 	}
 	var hit, miss int
 	for i := 0; i < b.N; i++ {
-		_, ok := l.Get(trace[i])
-		if ok {
+		if _, ok := l.Get(trace[i]); ok {
 			hit++
 		} else {
 			miss++
@@ -95,21 +93,18 @@ func TestLRU(t *testing.T) {
 		}
 	}
 	for i := 0; i < 128; i++ {
-		_, ok := l.Get(i)
-		if ok {
+		if _, ok := l.Get(i); ok {
 			t.Fatalf("should be evicted")
 		}
 	}
 	for i := 128; i < 256; i++ {
-		_, ok := l.Get(i)
-		if !ok {
+		if _, ok := l.Get(i); !ok {
 			t.Fatalf("should not be evicted")
 		}
 	}
 	for i := 128; i < 192; i++ {
 		l.Remove(i)
-		_, ok := l.Get(i)
-		if ok {
+		if _, ok := l.Get(i); ok {
 			t.Fatalf("should be deleted")
 		}
 	}

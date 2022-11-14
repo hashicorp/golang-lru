@@ -100,8 +100,7 @@ func (c *LRU[K, V]) Remove(key K) (present bool) {
 
 // RemoveOldest removes the oldest item from the cache.
 func (c *LRU[K, V]) RemoveOldest() (key K, value V, ok bool) {
-	ent := c.evictList.back()
-	if ent != nil {
+	if ent := c.evictList.back(); ent != nil {
 		c.removeElement(ent)
 		return ent.key, ent.value, true
 	}
@@ -110,8 +109,7 @@ func (c *LRU[K, V]) RemoveOldest() (key K, value V, ok bool) {
 
 // GetOldest returns the oldest entry
 func (c *LRU[K, V]) GetOldest() (key K, value V, ok bool) {
-	ent := c.evictList.back()
-	if ent != nil {
+	if ent := c.evictList.back(); ent != nil {
 		return ent.key, ent.value, true
 	}
 	return
@@ -148,8 +146,7 @@ func (c *LRU[K, V]) Resize(size int) (evicted int) {
 
 // removeOldest removes the oldest item from the cache.
 func (c *LRU[K, V]) removeOldest() {
-	ent := c.evictList.back()
-	if ent != nil {
+	if ent := c.evictList.back(); ent != nil {
 		c.removeElement(ent)
 	}
 }
