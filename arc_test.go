@@ -28,8 +28,7 @@ func BenchmarkARC_Rand(b *testing.B) {
 		if i%2 == 0 {
 			l.Add(trace[i], trace[i])
 		} else {
-			_, ok := l.Get(trace[i])
-			if ok {
+			if _, ok := l.Get(trace[i]); ok {
 				hit++
 			} else {
 				miss++
@@ -61,8 +60,7 @@ func BenchmarkARC_Freq(b *testing.B) {
 	}
 	var hit, miss int
 	for i := 0; i < b.N; i++ {
-		_, ok := l.Get(trace[i])
-		if ok {
+		if _, ok := l.Get(trace[i]); ok {
 			hit++
 		} else {
 			miss++
@@ -121,8 +119,7 @@ func TestARC_Get_RecentToFrequent(t *testing.T) {
 
 	// Get should upgrade to t2
 	for i := 0; i < 128; i++ {
-		_, ok := l.Get(i)
-		if !ok {
+		if _, ok := l.Get(i); !ok {
 			t.Fatalf("missing: %d", i)
 		}
 	}
@@ -135,8 +132,7 @@ func TestARC_Get_RecentToFrequent(t *testing.T) {
 
 	// Get be from t2
 	for i := 0; i < 128; i++ {
-		_, ok := l.Get(i)
-		if !ok {
+		if _, ok := l.Get(i); !ok {
 			t.Fatalf("missing: %d", i)
 		}
 	}
@@ -310,21 +306,18 @@ func TestARC(t *testing.T) {
 		}
 	}
 	for i := 0; i < 128; i++ {
-		_, ok := l.Get(i)
-		if ok {
+		if _, ok := l.Get(i); ok {
 			t.Fatalf("should be evicted")
 		}
 	}
 	for i := 128; i < 256; i++ {
-		_, ok := l.Get(i)
-		if !ok {
+		if _, ok := l.Get(i); !ok {
 			t.Fatalf("should not be evicted")
 		}
 	}
 	for i := 128; i < 192; i++ {
 		l.Remove(i)
-		_, ok := l.Get(i)
-		if ok {
+		if _, ok := l.Get(i); ok {
 			t.Fatalf("should be deleted")
 		}
 	}
