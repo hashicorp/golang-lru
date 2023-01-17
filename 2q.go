@@ -1,7 +1,7 @@
 package lru
 
 import (
-	"fmt"
+	"errors"
 	"sync"
 
 	"github.com/hashicorp/golang-lru/v2/simplelru"
@@ -46,13 +46,13 @@ func New2Q[K comparable, V any](size int) (*TwoQueueCache[K, V], error) {
 // parameter values.
 func New2QParams[K comparable, V any](size int, recentRatio, ghostRatio float64) (*TwoQueueCache[K, V], error) {
 	if size <= 0 {
-		return nil, fmt.Errorf("invalid size")
+		return nil, errors.New("invalid size")
 	}
 	if recentRatio < 0.0 || recentRatio > 1.0 {
-		return nil, fmt.Errorf("invalid recent ratio")
+		return nil, errors.New("invalid recent ratio")
 	}
 	if ghostRatio < 0.0 || ghostRatio > 1.0 {
-		return nil, fmt.Errorf("invalid ghost ratio")
+		return nil, errors.New("invalid ghost ratio")
 	}
 
 	// Determine the sub-sizes
