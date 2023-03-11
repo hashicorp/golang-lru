@@ -32,7 +32,7 @@ type TwoQueueCache[K comparable, V any] struct {
 
 	recent      simplelru.LRUCache[K, V]
 	frequent    simplelru.LRUCache[K, V]
-	recentEvict simplelru.LRUCache[K, V]
+	recentEvict simplelru.LRUCache[K, struct{}]
 	lock        sync.RWMutex
 }
 
@@ -68,7 +68,7 @@ func New2QParams[K comparable, V any](size int, recentRatio, ghostRatio float64)
 	if err != nil {
 		return nil, err
 	}
-	recentEvict, err := simplelru.NewLRU[K, V](evictSize, nil)
+	recentEvict, err := simplelru.NewLRU[K, struct{}](evictSize, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -153,8 +153,7 @@ func (c *TwoQueueCache[K, V]) ensureSpace(recentEvict bool) {
 	// the target, evict from there
 	if recentLen > 0 && (recentLen > c.recentSize || (recentLen == c.recentSize && !recentEvict)) {
 		k, _, _ := c.recent.RemoveOldest()
-		var empty V
-		c.recentEvict.Add(k, empty)
+		c.recentEvict.Add(k, struct{}{})
 		return
 	}
 
