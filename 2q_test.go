@@ -32,7 +32,7 @@ func Benchmark2Q_Rand(b *testing.B) {
 			}
 		}
 	}
-	b.Logf("hit: %d miss: %d ratio: %f", hit, miss, float64(hit)/float64(miss))
+	b.Logf("hit: %d miss: %d ratio: %f", hit, miss, float64(hit)/float64(hit+miss))
 }
 
 func Benchmark2Q_Freq(b *testing.B) {
@@ -63,7 +63,7 @@ func Benchmark2Q_Freq(b *testing.B) {
 			miss++
 		}
 	}
-	b.Logf("hit: %d miss: %d ratio: %f", hit, miss, float64(hit)/float64(miss))
+	b.Logf("hit: %d miss: %d ratio: %f", hit, miss, float64(hit)/float64(hit+miss))
 }
 
 func Test2Q_RandomOps(t *testing.T) {
