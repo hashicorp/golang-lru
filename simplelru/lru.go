@@ -5,7 +5,6 @@ package simplelru
 
 import (
 	"errors"
-	"time"
 )
 
 // EvictCallback is used to get a callback when a cache entry is evicted
@@ -58,7 +57,7 @@ func (c *LRU[K, V]) Add(key K, value V) (evicted bool) {
 	}
 
 	// Add new item
-	ent := c.evictList.pushFront(key, value, time.Time{})
+	ent := c.evictList.pushFront(key, value)
 	c.items[key] = ent
 
 	evict := c.evictList.length() > c.size

@@ -24,8 +24,11 @@ type entry[K comparable, V any] struct {
 	// The value stored with this element.
 	value V
 
-	// The time this element would be cleaned up
+	// The time this element would be cleaned up, optional
 	expiresAt time.Time
+
+	// The expiry bucket item was put in, optional
+	expireBucket uint8
 }
 
 // prevEntry returns the previous list element or nil.
@@ -116,7 +119,13 @@ func (l *lruList[K, V]) move(e, at *entry[K, V]) {
 }
 
 // pushFront inserts a new element e with value v at the front of list l and returns e.
-func (l *lruList[K, V]) pushFront(k K, v V, expiresAt time.Time) *entry[K, V] {
+func (l *lruList[K, V]) pushFront(k K, v V) *entry[K, V] {
+	l.lazyInit()
+	return l.insertValue(k, v, time.Time{}, &l.root)
+}
+
+// pushFrontExpirable inserts a new expirable element e with value v at the front of list l and returns e.
+func (l *lruList[K, V]) pushFrontExpirable(k K, v V, expiresAt time.Time) *entry[K, V] {
 	l.lazyInit()
 	return l.insertValue(k, v, expiresAt, &l.root)
 }

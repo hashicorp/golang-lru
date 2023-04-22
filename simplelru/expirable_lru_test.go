@@ -12,7 +12,7 @@ import (
 )
 
 func BenchmarkExpirableLRU_Rand_NoExpire(b *testing.B) {
-	l := NewExpirableLRU[int64, int64](8192, nil, 0, 0)
+	l := NewExpirableLRU[int64, int64](8192, nil, 0)
 
 	trace := make([]int64, b.N*2)
 	for i := 0; i < b.N*2; i++ {
@@ -37,7 +37,7 @@ func BenchmarkExpirableLRU_Rand_NoExpire(b *testing.B) {
 }
 
 func BenchmarkExpirableLRU_Freq_NoExpire(b *testing.B) {
-	l := NewExpirableLRU[int64, int64](8192, nil, 0, 0)
+	l := NewExpirableLRU[int64, int64](8192, nil, 0)
 
 	trace := make([]int64, b.N*2)
 	for i := 0; i < b.N*2; i++ {
@@ -65,7 +65,8 @@ func BenchmarkExpirableLRU_Freq_NoExpire(b *testing.B) {
 }
 
 func BenchmarkExpirableLRU_Rand_WithExpire(b *testing.B) {
-	l := NewExpirableLRU[int64, int64](8192, nil, time.Millisecond*10, time.Millisecond*50)
+	l := NewExpirableLRU[int64, int64](8192, nil, time.Millisecond*10)
+	defer l.Close()
 
 	trace := make([]int64, b.N*2)
 	for i := 0; i < b.N*2; i++ {
@@ -90,7 +91,8 @@ func BenchmarkExpirableLRU_Rand_WithExpire(b *testing.B) {
 }
 
 func BenchmarkExpirableLRU_Freq_WithExpire(b *testing.B) {
-	l := NewExpirableLRU[int64, int64](8192, nil, time.Millisecond*10, time.Millisecond*50)
+	l := NewExpirableLRU[int64, int64](8192, nil, time.Millisecond*10)
+	defer l.Close()
 
 	trace := make([]int64, b.N*2)
 	for i := 0; i < b.N*2; i++ {
@@ -122,7 +124,7 @@ func TestExpirableLRUInterface(t *testing.T) {
 }
 
 func TestExpirableLRUNoPurge(t *testing.T) {
-	lc := NewExpirableLRU[string, string](10, nil, 0, 0)
+	lc := NewExpirableLRU[string, string](10, nil, 0)
 
 	lc.Add("key1", "val1")
 	if lc.Len() != 1 {
@@ -169,7 +171,7 @@ func TestExpirableLRUNoPurge(t *testing.T) {
 }
 
 func TestExpirableMultipleClose(t *testing.T) {
-	lc := NewExpirableLRU[string, string](10, nil, 0, 0)
+	lc := NewExpirableLRU[string, string](10, nil, 0)
 	lc.Close()
 	// should not panic
 	lc.Close()
@@ -177,7 +179,7 @@ func TestExpirableMultipleClose(t *testing.T) {
 
 func TestExpirableLRUWithPurge(t *testing.T) {
 	var evicted []string
-	lc := NewExpirableLRU(10, func(key string, value string) { evicted = append(evicted, key, value) }, 150*time.Millisecond, time.Millisecond*100)
+	lc := NewExpirableLRU(10, func(key string, value string) { evicted = append(evicted, key, value) }, 150*time.Millisecond)
 	defer lc.Close()
 
 	k, v, ok := lc.GetOldest()
@@ -259,7 +261,7 @@ func TestExpirableLRUWithPurge(t *testing.T) {
 }
 
 func TestExpirableLRUWithPurgeEnforcedBySize(t *testing.T) {
-	lc := NewExpirableLRU[string, string](10, nil, time.Hour, 0)
+	lc := NewExpirableLRU[string, string](10, nil, time.Hour)
 	defer lc.Close()
 
 	for i := 0; i < 100; i++ {
@@ -283,7 +285,7 @@ func TestExpirableLRUWithPurgeEnforcedBySize(t *testing.T) {
 }
 
 func TestExpirableLRUConcurrency(t *testing.T) {
-	lc := NewExpirableLRU[string, string](0, nil, 0, 0)
+	lc := NewExpirableLRU[string, string](0, nil, 0)
 	wg := sync.WaitGroup{}
 	wg.Add(1000)
 	for i := 0; i < 1000; i++ {
@@ -300,7 +302,7 @@ func TestExpirableLRUConcurrency(t *testing.T) {
 
 func TestExpirableLRUInvalidateAndEvict(t *testing.T) {
 	var evicted int
-	lc := NewExpirableLRU(-1, func(_, _ string) { evicted++ }, 0, 0)
+	lc := NewExpirableLRU(-1, func(_, _ string) { evicted++ }, 0)
 
 	lc.Add("key1", "val1")
 	lc.Add("key2", "val2")
@@ -330,7 +332,8 @@ func TestExpirableLRUInvalidateAndEvict(t *testing.T) {
 }
 
 func TestLoadingExpired(t *testing.T) {
-	lc := NewExpirableLRU[string, string](0, nil, time.Millisecond*5, 0)
+	lc := NewExpirableLRU[string, string](0, nil, time.Millisecond*5)
+	defer lc.Close()
 
 	lc.Add("key1", "val1")
 	if lc.Len() != 1 {
@@ -354,9 +357,9 @@ func TestLoadingExpired(t *testing.T) {
 	}
 
 	time.Sleep(time.Millisecond * 10) // wait for entry to expire
-	if lc.Len() != 1 {
+	if lc.Len() != 0 {
 		t.Fatalf("length differs from expected")
-	} // but not purged
+	}
 
 	v, ok = lc.Peek("key1")
 	if v != "" {
@@ -376,7 +379,7 @@ func TestLoadingExpired(t *testing.T) {
 }
 
 func TestExpirableLRURemoveOldest(t *testing.T) {
-	lc := NewExpirableLRU[string, string](2, nil, 0, 0)
+	lc := NewExpirableLRU[string, string](2, nil, 0)
 
 	k, v, ok := lc.RemoveOldest()
 	if k != "" {
@@ -442,8 +445,8 @@ func TestExpirableLRURemoveOldest(t *testing.T) {
 }
 
 func ExampleExpirableLRU() {
-	// make cache with 5ms TTL and 3 max keys, purge every 10ms
-	cache := NewExpirableLRU[string, string](3, nil, time.Millisecond*5, time.Millisecond*10)
+	// make cache with 10ms TTL and 5 max keys
+	cache := NewExpirableLRU[string, string](5, nil, time.Millisecond*10)
 	// expirable cache need to be closed after used
 	defer cache.Close()
 
@@ -459,7 +462,7 @@ func ExampleExpirableLRU() {
 	}
 
 	// wait for cache to expire
-	time.Sleep(time.Millisecond * 16)
+	time.Sleep(time.Millisecond * 12)
 
 	// get value under key1 after key expiration
 	r, ok = cache.Get("key1")

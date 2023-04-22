@@ -6,6 +6,10 @@ import (
 )
 
 // ExpirableLRU implements a thread-safe LRU with expirable entries.
+//
+// Entries can be cleaned up from cache with up to 1% of ttl unused.
+// It happens because cleanup mechanism puts them 99 cleanup buckets away
+// from the current moment,and then cleans them up 99% of ttl later instead of 100%.
 type ExpirableLRU[K comparable, V any] struct {
 	size      int
 	evictList *lruList[K, V]
@@ -13,15 +17,26 @@ type ExpirableLRU[K comparable, V any] struct {
 	onEvict   EvictCallback[K, V]
 
 	// expirable options
-	mu         sync.Mutex
-	purgeEvery time.Duration
-	ttl        time.Duration
-	done       chan struct{}
+	mu   sync.Mutex
+	ttl  time.Duration
+	done chan struct{}
+
+	// buckets for expiration
+	buckets []bucket[K, V]
+	// uint8 because it's number between 0 and numBuckets
+	nextCleanupBucket uint8
+}
+
+// bucket is a container for holding entries to be expired
+type bucket[K comparable, V any] struct {
+	entries map[K]*entry[K, V]
 }
 
 // noEvictionTTL - very long ttl to prevent eviction
 const noEvictionTTL = time.Hour * 24 * 365 * 10
-const defaultPurgeEvery = time.Minute * 5
+
+// because of uint8 usage for nextCleanupBucket, should not exceed 256.
+const numBuckets = 100
 
 // NewExpirableLRU returns a new thread-safe cache with expirable entries.
 //
@@ -29,9 +44,8 @@ const defaultPurgeEvery = time.Minute * 5
 //
 // Providing 0 TTL turns expiring off.
 //
-// Activates deleteExpired by purgeEvery duration.
-// If MaxKeys and TTL are defined and PurgeEvery is zero, PurgeEvery will be set to 5 minutes.
-func NewExpirableLRU[K comparable, V any](size int, onEvict EvictCallback[K, V], ttl, purgeEvery time.Duration) *ExpirableLRU[K, V] {
+// Delete expired entries every 1/100th of ttl value.
+func NewExpirableLRU[K comparable, V any](size int, onEvict EvictCallback[K, V], ttl time.Duration) *ExpirableLRU[K, V] {
 	if size < 0 {
 		size = 0
 	}
@@ -40,23 +54,25 @@ func NewExpirableLRU[K comparable, V any](size int, onEvict EvictCallback[K, V],
 	}
 
 	res := ExpirableLRU[K, V]{
-		items:      make(map[K]*entry[K, V]),
-		evictList:  newList[K, V](),
-		ttl:        ttl,
-		purgeEvery: purgeEvery,
-		size:       size,
-		onEvict:    onEvict,
-		done:       make(chan struct{}),
+		ttl:       ttl,
+		size:      size,
+		evictList: newList[K, V](),
+		items:     make(map[K]*entry[K, V]),
+		onEvict:   onEvict,
+		done:      make(chan struct{}),
+	}
+
+	// initialize the buckets
+	res.buckets = make([]bucket[K, V], numBuckets)
+	for i := 0; i < numBuckets; i++ {
+		res.buckets[i] = bucket[K, V]{entries: make(map[K]*entry[K, V])}
 	}
 
 	// enable deleteExpired() running in separate goroutine for cache
-	// with non-zero TTL and size defined
-	if res.ttl != noEvictionTTL && (res.size > 0 || res.purgeEvery > 0) {
-		if res.purgeEvery <= 0 {
-			res.purgeEvery = defaultPurgeEvery // non-zero purge enforced because size is defined
-		}
+	// with non-zero TTL
+	if res.ttl != noEvictionTTL {
 		go func(done <-chan struct{}) {
-			ticker := time.NewTicker(res.purgeEvery)
+			ticker := time.NewTicker(res.ttl / numBuckets)
 			for {
 				select {
 				case <-done:
@@ -83,6 +99,11 @@ func (c *ExpirableLRU[K, V]) Purge() {
 		}
 		delete(c.items, k)
 	}
+	for _, b := range c.buckets {
+		for _, ent := range b.entries {
+			delete(b.entries, ent.key)
+		}
+	}
 	c.evictList.init()
 }
 
@@ -97,27 +118,32 @@ func (c *ExpirableLRU[K, V]) Add(key K, value V) (evicted bool) {
 	// Check for existing item
 	if ent, ok := c.items[key]; ok {
 		c.evictList.moveToFront(ent)
+		c.removeFromBucket(ent) // remove the entry from its current bucket as expiresAt is renewed
 		ent.value = value
 		ent.expiresAt = now.Add(c.ttl)
+		c.addToBucket(ent)
 		return false
 	}
 
 	// Add new item
-	c.items[key] = c.evictList.pushFront(key, value, now.Add(c.ttl))
+	ent := c.evictList.pushFrontExpirable(key, value, now.Add(c.ttl))
+	c.items[key] = ent
+	c.addToBucket(ent) // adds the entry to the appropriate bucket and sets entry.expireBucket
 
+	evict := c.size > 0 && c.evictList.length() > c.size
 	// Verify size not exceeded
-	if c.size > 0 && len(c.items) > c.size {
+	if evict {
 		c.removeOldest()
-		return true
 	}
-	return false
+	return evict
 }
 
 // Get looks up a key's value from the cache.
 func (c *ExpirableLRU[K, V]) Get(key K) (value V, ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if ent, found := c.items[key]; found {
+	var ent *entry[K, V]
+	if ent, ok = c.items[key]; ok {
 		// Expired item check
 		if time.Now().After(ent.expiresAt) {
 			return
@@ -142,7 +168,8 @@ func (c *ExpirableLRU[K, V]) Contains(key K) (ok bool) {
 func (c *ExpirableLRU[K, V]) Peek(key K) (value V, ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if ent, found := c.items[key]; found {
+	var ent *entry[K, V]
+	if ent, ok = c.items[key]; ok {
 		// Expired item check
 		if time.Now().After(ent.expiresAt) {
 			return
@@ -189,7 +216,11 @@ func (c *ExpirableLRU[K, V]) GetOldest() (key K, value V, ok bool) {
 func (c *ExpirableLRU[K, V]) Keys() []K {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.keys()
+	keys := make([]K, 0, len(c.items))
+	for ent := c.evictList.back(); ent != nil; ent = ent.prevEntry() {
+		keys = append(keys, ent.key)
+	}
+	return keys
 }
 
 // Len returns the number of items in the cache.
@@ -199,14 +230,14 @@ func (c *ExpirableLRU[K, V]) Len() int {
 	return c.evictList.length()
 }
 
-// Resize changes the cache size. Size of 0 doesn't resize the cache, as it means unlimited.
+// Resize changes the cache size. Size of 0 means unlimited.
 func (c *ExpirableLRU[K, V]) Resize(size int) (evicted int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if size <= 0 {
 		c.size = 0
 		return 0
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	diff := c.evictList.length() - size
 	if diff < 0 {
 		diff = 0
@@ -218,7 +249,7 @@ func (c *ExpirableLRU[K, V]) Resize(size int) (evicted int) {
 	return diff
 }
 
-// Close cleans the cache and destroys running goroutines
+// Close destroys cleanup goroutine. To clean up the cache, run Purge() before Close().
 func (c *ExpirableLRU[K, V]) Close() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -241,25 +272,31 @@ func (c *ExpirableLRU[K, V]) removeOldest() {
 func (c *ExpirableLRU[K, V]) removeElement(e *entry[K, V]) {
 	c.evictList.remove(e)
 	delete(c.items, e.key)
+	c.removeFromBucket(e)
 	if c.onEvict != nil {
 		c.onEvict(e.key, e.value)
 	}
 }
 
-// deleteExpired deletes expired records. Has to be called with lock!
+// deleteExpired deletes expired records. Doesn't check for entry.expiresAt as it could be
+// TTL/numBuckets in the future, with numBuckets of 100 its 1% of wasted TTL.
+// Has to be called with lock!
 func (c *ExpirableLRU[K, V]) deleteExpired() {
-	for _, key := range c.keys() {
-		if time.Now().After(c.items[key].expiresAt) {
-			c.removeElement(c.items[key])
-		}
+	bucketIdx := c.nextCleanupBucket
+	for _, ent := range c.buckets[bucketIdx].entries {
+		c.removeElement(ent)
 	}
+	c.nextCleanupBucket = (c.nextCleanupBucket + 1) % numBuckets
 }
 
-// keys returns a slice of the keys in the cache, from oldest to newest. Has to be called with lock!
-func (c *ExpirableLRU[K, V]) keys() []K {
-	keys := make([]K, 0, len(c.items))
-	for ent := c.evictList.back(); ent != nil; ent = ent.prevEntry() {
-		keys = append(keys, ent.key)
-	}
-	return keys
+// addToBucket adds entry to expire bucket so that it will be cleaned up when the time comes. Has to be called with lock!
+func (c *ExpirableLRU[K, V]) addToBucket(e *entry[K, V]) {
+	bucketID := (numBuckets + c.nextCleanupBucket - 1) % numBuckets
+	e.expireBucket = bucketID
+	c.buckets[bucketID].entries[e.key] = e
+}
+
+// removeFromBucket removes the entry from its corresponding bucket. Has to be called with lock!
+func (c *ExpirableLRU[K, V]) removeFromBucket(e *entry[K, V]) {
+	delete(c.buckets[e.expireBucket].entries, e.key)
 }

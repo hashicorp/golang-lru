@@ -45,8 +45,8 @@ import (
 )
 
 func main() {
-	// make cache with short TTL and 3 max keys, purgeEvery time.Millisecond * 10
-	cache := simplelru.NewExpirableLRU[string, string](3, nil, time.Millisecond*5, time.Millisecond*10)
+	// make cache with 10ms TTL and 5 max keys
+	cache := simplelru.NewExpirableLRU[string, string](5, nil, time.Millisecond*10)
 	// expirable cache need to be closed after used
 	defer cache.Close()
 
@@ -61,7 +61,8 @@ func main() {
 		fmt.Printf("value before expiration is found: %v, value: %q\n", ok, r)
 	}
 
-	time.Sleep(time.Millisecond * 11)
+	// wait for cache to expire
+	time.Sleep(time.Millisecond * 12)
 
 	// get value under key1 after key expiration
 	r, ok = cache.Get("key1")
@@ -70,7 +71,7 @@ func main() {
 	// set value under key2, would evict old entry because it is already expired.
 	cache.Add("key2", "val2")
 
-	fmt.Printf("Cache len: %d", cache.Len())
+	fmt.Printf("Cache len: %d\n", cache.Len())
 	// Output:
 	// value before expiration is found: true, value: "val1"
 	// value after expiration is found: false, value: ""
