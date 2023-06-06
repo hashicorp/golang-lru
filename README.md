@@ -23,7 +23,7 @@ import (
 )
 
 func main() {
-  l, _ := lru.New[int, interface{}](128)
+  l, _ := lru.New[int, any](128)
   for i := 0; i < 256; i++ {
       l.Add(i, nil)
   }
@@ -31,5 +31,4 @@ func main() {
       panic(fmt.Sprintf("bad len: %v", l.Len()))
   }
 }
-
 ```
