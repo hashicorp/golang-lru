@@ -1,23 +1,23 @@
+# Copyright (c) HashiCorp, Inc.
+# SPDX-License-Identifier: MPL-2.0
+
 linters:
   enable:
     - megacheck
-    - golint
+    - revive
     - govet
     - unconvert
     - megacheck
-    - structcheck
     - gas
     - gocyclo
     - dupl
     - misspell
     - unparam
-    - varcheck
-    - deadcode
+    - unused
     - typecheck
     - ineffassign
-    - varcheck
     - stylecheck
-    - scopelint
+    - exportloopref
     - gocritic
     - nakedret
     - gosimple

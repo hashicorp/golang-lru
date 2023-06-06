@@ -1,19 +1,21 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 package lru
 
 import (
-	"math/rand"
 	"testing"
 )
 
 func Benchmark2Q_Rand(b *testing.B) {
-	l, err := New2Q(8192)
+	l, err := New2Q[int64, int64](8192)
 	if err != nil {
 		b.Fatalf("err: %v", err)
 	}
 
 	trace := make([]int64, b.N*2)
 	for i := 0; i < b.N*2; i++ {
-		trace[i] = rand.Int63() % 32768
+		trace[i] = getRand(b) % 32768
 	}
 
 	b.ResetTimer()
@@ -23,19 +25,18 @@ func Benchmark2Q_Rand(b *testing.B) {
 		if i%2 == 0 {
 			l.Add(trace[i], trace[i])
 		} else {
-			_, ok := l.Get(trace[i])
-			if ok {
+			if _, ok := l.Get(trace[i]); ok {
 				hit++
 			} else {
 				miss++
 			}
 		}
 	}
-	b.Logf("hit: %d miss: %d ratio: %f", hit, miss, float64(hit)/float64(miss))
+	b.Logf("hit: %d miss: %d ratio: %f", hit, miss, float64(hit)/float64(hit+miss))
 }
 
 func Benchmark2Q_Freq(b *testing.B) {
-	l, err := New2Q(8192)
+	l, err := New2Q[int64, int64](8192)
 	if err != nil {
 		b.Fatalf("err: %v", err)
 	}
@@ -43,9 +44,9 @@ func Benchmark2Q_Freq(b *testing.B) {
 	trace := make([]int64, b.N*2)
 	for i := 0; i < b.N*2; i++ {
 		if i%2 == 0 {
-			trace[i] = rand.Int63() % 16384
+			trace[i] = getRand(b) % 16384
 		} else {
-			trace[i] = rand.Int63() % 32768
+			trace[i] = getRand(b) % 32768
 		}
 	}
 
@@ -56,27 +57,26 @@ func Benchmark2Q_Freq(b *testing.B) {
 	}
 	var hit, miss int
 	for i := 0; i < b.N; i++ {
-		_, ok := l.Get(trace[i])
-		if ok {
+		if _, ok := l.Get(trace[i]); ok {
 			hit++
 		} else {
 			miss++
 		}
 	}
-	b.Logf("hit: %d miss: %d ratio: %f", hit, miss, float64(hit)/float64(miss))
+	b.Logf("hit: %d miss: %d ratio: %f", hit, miss, float64(hit)/float64(hit+miss))
 }
 
 func Test2Q_RandomOps(t *testing.T) {
 	size := 128
-	l, err := New2Q(128)
+	l, err := New2Q[int64, int64](128)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
 
 	n := 200000
 	for i := 0; i < n; i++ {
-		key := rand.Int63() % 512
-		r := rand.Int63()
+		key := getRand(t) % 512
+		r := getRand(t)
 		switch r % 3 {
 		case 0:
 			l.Add(key, key)
@@ -94,7 +94,7 @@ func Test2Q_RandomOps(t *testing.T) {
 }
 
 func Test2Q_Get_RecentToFrequent(t *testing.T) {
-	l, err := New2Q(128)
+	l, err := New2Q[int, int](128)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -112,8 +112,7 @@ func Test2Q_Get_RecentToFrequent(t *testing.T) {
 
 	// Get should upgrade to t2
 	for i := 0; i < 128; i++ {
-		_, ok := l.Get(i)
-		if !ok {
+		if _, ok := l.Get(i); !ok {
 			t.Fatalf("missing: %d", i)
 		}
 	}
@@ -126,8 +125,7 @@ func Test2Q_Get_RecentToFrequent(t *testing.T) {
 
 	// Get be from t2
 	for i := 0; i < 128; i++ {
-		_, ok := l.Get(i)
-		if !ok {
+		if _, ok := l.Get(i); !ok {
 			t.Fatalf("missing: %d", i)
 		}
 	}
@@ -140,7 +138,7 @@ func Test2Q_Get_RecentToFrequent(t *testing.T) {
 }
 
 func Test2Q_Add_RecentToFrequent(t *testing.T) {
-	l, err := New2Q(128)
+	l, err := New2Q[int, int](128)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -174,7 +172,7 @@ func Test2Q_Add_RecentToFrequent(t *testing.T) {
 }
 
 func Test2Q_Add_RecentEvict(t *testing.T) {
-	l, err := New2Q(4)
+	l, err := New2Q[int, int](4)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -221,7 +219,7 @@ func Test2Q_Add_RecentEvict(t *testing.T) {
 }
 
 func Test2Q(t *testing.T) {
-	l, err := New2Q(128)
+	l, err := New2Q[int, int](128)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -244,21 +242,18 @@ func Test2Q(t *testing.T) {
 		}
 	}
 	for i := 0; i < 128; i++ {
-		_, ok := l.Get(i)
-		if ok {
+		if _, ok := l.Get(i); ok {
 			t.Fatalf("should be evicted")
 		}
 	}
 	for i := 128; i < 256; i++ {
-		_, ok := l.Get(i)
-		if !ok {
+		if _, ok := l.Get(i); !ok {
 			t.Fatalf("should not be evicted")
 		}
 	}
 	for i := 128; i < 192; i++ {
 		l.Remove(i)
-		_, ok := l.Get(i)
-		if ok {
+		if _, ok := l.Get(i); ok {
 			t.Fatalf("should be deleted")
 		}
 	}
@@ -274,7 +269,7 @@ func Test2Q(t *testing.T) {
 
 // Test that Contains doesn't update recent-ness
 func Test2Q_Contains(t *testing.T) {
-	l, err := New2Q(2)
+	l, err := New2Q[int, int](2)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
@@ -293,7 +288,7 @@ func Test2Q_Contains(t *testing.T) {
 
 // Test that Peek doesn't update recent-ness
 func Test2Q_Peek(t *testing.T) {
-	l, err := New2Q(2)
+	l, err := New2Q[int, int](2)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
