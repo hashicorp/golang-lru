@@ -130,11 +130,11 @@ func (c *LRU[K, V]) Keys() []K {
 }
 
 // Values returns a slice of the values in the cache, from oldest to newest.
-func (c *LRU) Values() []interface{} {
-	values := make([]interface{}, len(c.items))
+func (c *LRU[K, V]) Values() []V {
+	values := make([]V, len(c.items))
 	i := 0
-	for ent := c.evictList.Back(); ent != nil; ent = ent.Prev() {
-		values[i] = ent.Value.(*entry).value
+	for ent := c.evictList.back(); ent != nil; ent = ent.prevEntry() {
+		values[i] = ent.value
 		i++
 	}
 	return values

@@ -183,7 +183,7 @@ func (c *TwoQueueCache[K, V]) Keys() []K {
 
 // Values returns a slice of the values in the cache.
 // The frequently used values are first in the returned slice.
-func (c *TwoQueueCache) Values() []interface{} {
+func (c *TwoQueueCache[K, V]) Values() []V {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	v1 := c.frequent.Values()

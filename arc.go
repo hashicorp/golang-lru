@@ -212,7 +212,7 @@ func (c *ARCCache[K, V]) Keys() []K {
 }
 
 // Values returns all the cached values
-func (c *ARCCache) Values() []interface{} {
+func (c *ARCCache[K, V]) Values() []V {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	v1 := c.t1.Values()

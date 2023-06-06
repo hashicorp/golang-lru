@@ -234,7 +234,7 @@ func (c *Cache[K, V]) Keys() []K {
 }
 
 // Values returns a slice of the values in the cache, from oldest to newest.
-func (c *Cache) Values() []interface{} {
+func (c *Cache[K, V]) Values() []V {
 	c.lock.RLock()
 	values := c.lru.Values()
 	c.lock.RUnlock()
