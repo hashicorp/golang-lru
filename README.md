@@ -23,12 +23,30 @@ import (
 )
 
 func main() {
-  l, _ := lru.New[int, any](128)
-  for i := 0; i < 256; i++ {
-      l.Add(i, nil)
-  }
-  if l.Len() != 128 {
-      panic(fmt.Sprintf("bad len: %v", l.Len()))
-  }
+	l, _ := lru.New[int, any](128)
+	for i := 0; i < 256; i++ {
+		l.Add(i, nil)
+	}
+
+	fmt.Printf("the lru length is %d\n", l.Len())
+
+	ok := l.Contains(127)
+	if !ok {
+		fmt.Printf("the key is not found\n")
+	}
+
+	val, ok := l.Get(129)
+	if ok {
+		fmt.Printf("the value is %v\n", val)
+	}
+
+	l.Resize(64)
+	fmt.Printf("the lru length is %d\n", l.Len())
+
+	// Output:
+	// the lru length is 128
+	// the key is not found
+	// the value is <nil>
+	// the lru length is 64
 }
 ```
