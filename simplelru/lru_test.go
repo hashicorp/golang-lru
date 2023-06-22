@@ -111,6 +111,44 @@ func TestLRU_GetOldest_RemoveOldest(t *testing.T) {
 	}
 }
 
+func TestLRU_GetNewest(t *testing.T) {
+	l, err := NewLRU[int, int](128, nil)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	for i := 0; i < 256; i++ {
+		l.Add(i, i)
+	}
+
+	k, _, ok := l.GetOldest()
+	if !ok {
+		t.Fatalf("missing")
+	}
+	if k != 128 {
+		t.Fatalf("bad oldest: %v", k)
+	}
+
+	k, _, ok = l.GetNewest()
+	if !ok {
+		t.Fatalf("missing")
+	}
+	if k != 255 {
+		t.Fatalf("bad newest: %v", k)
+	}
+
+	l.Get(128)
+	k, _, _ = l.GetNewest()
+	if k != 128 {
+		t.Fatalf("bad newest: %v", k)
+	}
+
+	l.Get(200)
+	k, _, _ = l.GetNewest()
+	if k != 200 {
+		t.Fatalf("bad newest: %v", k)
+	}
+}
+
 // Test that Add returns true/false if an eviction occurred
 func TestLRU_Add(t *testing.T) {
 	evictCounter := 0
