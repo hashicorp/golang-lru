@@ -4,13 +4,24 @@
 package arc
 
 import (
-	"math/rand"
+	"crypto/rand"
+	"math"
+	"math/big"
+	mathrand "math/rand"
 	"testing"
 	"time"
 )
 
+func getRand(tb testing.TB) int64 {
+	out, err := rand.Int(rand.Reader, big.NewInt(math.MaxInt64))
+	if err != nil {
+		tb.Fatal(err)
+	}
+	return out.Int64()
+}
+
 func init() {
-	rand.Seed(time.Now().Unix())
+	mathrand.Seed(time.Now().Unix())
 }
 
 func BenchmarkARC_Rand(b *testing.B) {
