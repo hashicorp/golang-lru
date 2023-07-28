@@ -85,6 +85,9 @@ func TestLRU(t *testing.T) {
 	if l.Len() != 128 {
 		t.Fatalf("bad len: %v", l.Len())
 	}
+	if l.Cap() != 128 {
+		t.Fatalf("expect %d, but %d", 128, l.Cap())
+	}
 
 	if evictCounter != 128 {
 		t.Fatalf("bad evict count: %v", evictCounter)

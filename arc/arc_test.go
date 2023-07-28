@@ -313,6 +313,9 @@ func TestARC(t *testing.T) {
 	if l.Len() != 128 {
 		t.Fatalf("bad len: %v", l.Len())
 	}
+	if l.Cap() != 128 {
+		t.Fatalf("expect %d, but %d", 128, l.Cap())
+	}
 
 	for i, k := range l.Keys() {
 		if v, ok := l.Get(k); !ok || v != k || v != i+128 {
@@ -340,6 +343,9 @@ func TestARC(t *testing.T) {
 			t.Fatalf("should be deleted")
 		}
 	}
+	if l.Cap() != 128 {
+		t.Fatalf("expect %d, but %d", 128, l.Cap())
+	}
 
 	l.Purge()
 	if l.Len() != 0 {
@@ -347,6 +353,9 @@ func TestARC(t *testing.T) {
 	}
 	if _, ok := l.Get(200); ok {
 		t.Fatalf("should contain nothing")
+	}
+	if l.Cap() != 128 {
+		t.Fatalf("expect %d, but %d", 128, l.Cap())
 	}
 }
 

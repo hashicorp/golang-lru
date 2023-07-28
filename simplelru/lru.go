@@ -148,6 +148,11 @@ func (c *LRU[K, V]) Len() int {
 	return c.evictList.length()
 }
 
+// Cap returns the capacity of the cache
+func (c *LRU[K, V]) Cap() int {
+	return c.size
+}
+
 // Resize changes the cache size.
 func (c *LRU[K, V]) Resize(size int) (evicted int) {
 	diff := c.Len() - size

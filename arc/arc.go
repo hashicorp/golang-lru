@@ -202,6 +202,11 @@ func (c *ARCCache[K, V]) Len() int {
 	return c.t1.Len() + c.t2.Len()
 }
 
+// Cap returns the capacity of cache
+func (c *ARCCache[K, V]) Cap() int {
+	return c.Cap()
+}
+
 // Keys returns all the cached keys
 func (c *ARCCache[K, V]) Keys() []K {
 	c.lock.RLock()

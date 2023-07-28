@@ -38,6 +38,9 @@ type LRUCache[K comparable, V any] interface {
 	// Returns the number of items in the cache.
 	Len() int
 
+	// Returns the capacity of the cache.
+	Cap() int
+
 	// Clears all cache entries.
 	Purge()
 
