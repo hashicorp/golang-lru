@@ -71,6 +71,7 @@ func NewExpirableLRU[K comparable, V any](size int, onEvict EvictCallback[K, V],
 	if res.ttl != noEvictionTTL {
 		go func(done <-chan struct{}) {
 			ticker := time.NewTicker(res.ttl / numBuckets)
+			defer ticker.Stop()
 			for {
 				select {
 				case <-done:

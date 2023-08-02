@@ -170,6 +170,41 @@ func TestExpirableLRUNoPurge(t *testing.T) {
 	}
 }
 
+func TestExpirableLRUEdgeCases(t *testing.T) {
+	lc := NewExpirableLRU[string, *string](2, nil, 0)
+
+	// Adding a nil value
+	lc.Add("key1", nil)
+
+	value, exists := lc.Get("key1")
+	if value != nil || !exists {
+		t.Fatalf("unexpected value or existence flag for key1: value=%v, exists=%v", value, exists)
+	}
+
+	// Adding an entry with the same key but different value
+	newVal := "val1"
+	lc.Add("key1", &newVal)
+
+	value, exists = lc.Get("key1")
+	if value != &newVal || !exists {
+		t.Fatalf("unexpected value or existence flag for key1: value=%v, exists=%v", value, exists)
+	}
+}
+
+func TestExpirableLRU_Values(t *testing.T) {
+	lc := NewExpirableLRU[string, string](3, nil, 0)
+	defer lc.Close()
+
+	lc.Add("key1", "val1")
+	lc.Add("key2", "val2")
+	lc.Add("key3", "val3")
+
+	values := lc.Values()
+	if !reflect.DeepEqual(values, []string{"val1", "val2", "val3"}) {
+		t.Fatalf("values differs from expected")
+	}
+}
+
 func TestExpirableMultipleClose(_ *testing.T) {
 	lc := NewExpirableLRU[string, string](10, nil, 0)
 	lc.Close()
