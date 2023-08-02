@@ -171,6 +171,11 @@ func (c *TwoQueueCache[K, V]) Len() int {
 	return c.recent.Len() + c.frequent.Len()
 }
 
+// Cap returns the capacity of the cache
+func (c *TwoQueueCache[K, V]) Cap() int {
+	return c.size
+}
+
 // Keys returns a slice of the keys in the cache.
 // The frequently used keys are first in the returned slice.
 func (c *TwoQueueCache[K, V]) Keys() []K {
