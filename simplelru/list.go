@@ -61,6 +61,14 @@ func (l *lruList[K, V]) back() *entry[K, V] {
 	return l.root.prev
 }
 
+// head returns the first element of list l or nil if the list is empty.
+func (l *lruList[K, V]) head() *entry[K, V] {
+	if l.len == 0 {
+		return nil
+	}
+	return l.root.next
+}
+
 // lazyInit lazily initializes a zero List value.
 func (l *lruList[K, V]) lazyInit() {
 	if l.root.next == nil {

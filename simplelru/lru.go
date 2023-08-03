@@ -121,6 +121,14 @@ func (c *LRU[K, V]) GetOldest() (key K, value V, ok bool) {
 	return
 }
 
+// GetNewest returns the newest entry
+func (c *LRU[K, V]) GetNewest() (key K, value V, ok bool) {
+	if ent := c.evictList.head(); ent != nil {
+		return ent.key, ent.value, true
+	}
+	return
+}
+
 // Keys returns a slice of the keys in the cache, from oldest to newest.
 func (c *LRU[K, V]) Keys() []K {
 	keys := make([]K, c.evictList.length())

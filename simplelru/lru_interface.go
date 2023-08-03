@@ -29,6 +29,9 @@ type LRUCache[K comparable, V any] interface {
 	// Returns the oldest entry from the cache. #key, value, isFound
 	GetOldest() (K, V, bool)
 
+	// Returns the newest entry from the cache. #key, value, isFound
+	GetNewest() (K, V, bool)
+
 	// Returns a slice of the keys in the cache, from oldest to newest.
 	Keys() []K
 

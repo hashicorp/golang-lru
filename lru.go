@@ -225,6 +225,14 @@ func (c *Cache[K, V]) GetOldest() (key K, value V, ok bool) {
 	return
 }
 
+// GetNewest returns the oldest entry
+func (c *Cache[K, V]) GetNewest() (key K, value V, ok bool) {
+	c.lock.RLock()
+	key, value, ok = c.lru.GetNewest()
+	c.lock.RUnlock()
+	return
+}
+
 // Keys returns a slice of the keys in the cache, from oldest to newest.
 func (c *Cache[K, V]) Keys() []K {
 	c.lock.RLock()
