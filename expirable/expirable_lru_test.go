@@ -1,4 +1,4 @@
-package simplelru
+package expirable
 
 import (
 	"crypto/rand"
@@ -9,9 +9,11 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/hashicorp/golang-lru/v2/simplelru"
 )
 
-func BenchmarkExpirableLRU_Rand_NoExpire(b *testing.B) {
+func BenchmarkLRU_Rand_NoExpire(b *testing.B) {
 	l := NewExpirableLRU[int64, int64](8192, nil, 0)
 
 	trace := make([]int64, b.N*2)
@@ -36,7 +38,7 @@ func BenchmarkExpirableLRU_Rand_NoExpire(b *testing.B) {
 	b.Logf("hit: %d miss: %d ratio: %f", hit, miss, float64(hit)/float64(hit+miss))
 }
 
-func BenchmarkExpirableLRU_Freq_NoExpire(b *testing.B) {
+func BenchmarkLRU_Freq_NoExpire(b *testing.B) {
 	l := NewExpirableLRU[int64, int64](8192, nil, 0)
 
 	trace := make([]int64, b.N*2)
@@ -64,7 +66,7 @@ func BenchmarkExpirableLRU_Freq_NoExpire(b *testing.B) {
 	b.Logf("hit: %d miss: %d ratio: %f", hit, miss, float64(hit)/float64(hit+miss))
 }
 
-func BenchmarkExpirableLRU_Rand_WithExpire(b *testing.B) {
+func BenchmarkLRU_Rand_WithExpire(b *testing.B) {
 	l := NewExpirableLRU[int64, int64](8192, nil, time.Millisecond*10)
 	defer l.Close()
 
@@ -90,7 +92,7 @@ func BenchmarkExpirableLRU_Rand_WithExpire(b *testing.B) {
 	b.Logf("hit: %d miss: %d ratio: %f", hit, miss, float64(hit)/float64(hit+miss))
 }
 
-func BenchmarkExpirableLRU_Freq_WithExpire(b *testing.B) {
+func BenchmarkLRU_Freq_WithExpire(b *testing.B) {
 	l := NewExpirableLRU[int64, int64](8192, nil, time.Millisecond*10)
 	defer l.Close()
 
@@ -119,11 +121,11 @@ func BenchmarkExpirableLRU_Freq_WithExpire(b *testing.B) {
 	b.Logf("hit: %d miss: %d ratio: %f", hit, miss, float64(hit)/float64(hit+miss))
 }
 
-func TestExpirableLRUInterface(_ *testing.T) {
-	var _ LRUCache[int, int] = &ExpirableLRU[int, int]{}
+func TestLRUInterface(_ *testing.T) {
+	var _ simplelru.LRUCache[int, int] = &LRU[int, int]{}
 }
 
-func TestExpirableLRUNoPurge(t *testing.T) {
+func TestLRUNoPurge(t *testing.T) {
 	lc := NewExpirableLRU[string, string](10, nil, 0)
 
 	lc.Add("key1", "val1")
@@ -170,7 +172,7 @@ func TestExpirableLRUNoPurge(t *testing.T) {
 	}
 }
 
-func TestExpirableLRUEdgeCases(t *testing.T) {
+func TestLRUEdgeCases(t *testing.T) {
 	lc := NewExpirableLRU[string, *string](2, nil, 0)
 
 	// Adding a nil value
@@ -191,7 +193,7 @@ func TestExpirableLRUEdgeCases(t *testing.T) {
 	}
 }
 
-func TestExpirableLRU_Values(t *testing.T) {
+func TestLRU_Values(t *testing.T) {
 	lc := NewExpirableLRU[string, string](3, nil, 0)
 	defer lc.Close()
 
@@ -212,7 +214,7 @@ func TestExpirableMultipleClose(_ *testing.T) {
 	lc.Close()
 }
 
-func TestExpirableLRUWithPurge(t *testing.T) {
+func TestLRUWithPurge(t *testing.T) {
 	var evicted []string
 	lc := NewExpirableLRU(10, func(key string, value string) { evicted = append(evicted, key, value) }, 150*time.Millisecond)
 	defer lc.Close()
@@ -295,7 +297,7 @@ func TestExpirableLRUWithPurge(t *testing.T) {
 	}
 }
 
-func TestExpirableLRUWithPurgeEnforcedBySize(t *testing.T) {
+func TestLRUWithPurgeEnforcedBySize(t *testing.T) {
 	lc := NewExpirableLRU[string, string](10, nil, time.Hour)
 	defer lc.Close()
 
@@ -319,7 +321,7 @@ func TestExpirableLRUWithPurgeEnforcedBySize(t *testing.T) {
 	}
 }
 
-func TestExpirableLRUConcurrency(t *testing.T) {
+func TestLRUConcurrency(t *testing.T) {
 	lc := NewExpirableLRU[string, string](0, nil, 0)
 	wg := sync.WaitGroup{}
 	wg.Add(1000)
@@ -335,7 +337,7 @@ func TestExpirableLRUConcurrency(t *testing.T) {
 	}
 }
 
-func TestExpirableLRUInvalidateAndEvict(t *testing.T) {
+func TestLRUInvalidateAndEvict(t *testing.T) {
 	var evicted int
 	lc := NewExpirableLRU(-1, func(_, _ string) { evicted++ }, 0)
 
@@ -413,7 +415,7 @@ func TestLoadingExpired(t *testing.T) {
 	}
 }
 
-func TestExpirableLRURemoveOldest(t *testing.T) {
+func TestLRURemoveOldest(t *testing.T) {
 	lc := NewExpirableLRU[string, string](2, nil, 0)
 
 	k, v, ok := lc.RemoveOldest()
@@ -479,7 +481,7 @@ func TestExpirableLRURemoveOldest(t *testing.T) {
 	}
 }
 
-func ExampleExpirableLRU() {
+func ExampleLRU() {
 	// make cache with 10ms TTL and 5 max keys
 	cache := NewExpirableLRU[string, string](5, nil, time.Millisecond*10)
 	// expirable cache need to be closed after used

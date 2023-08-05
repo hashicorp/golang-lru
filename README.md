@@ -41,12 +41,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hashicorp/golang-lru/v2/simplelru"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 )
 
 func main() {
 	// make cache with 10ms TTL and 5 max keys
-	cache := simplelru.NewExpirableLRU[string, string](5, nil, time.Millisecond*10)
+	cache := expirable.NewExpirableLRU[string, string](5, nil, time.Millisecond*10)
 	// expirable cache need to be closed after used
 	defer cache.Close()
 
