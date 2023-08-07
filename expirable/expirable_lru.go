@@ -47,7 +47,7 @@ const numBuckets = 100
 //
 // Providing 0 TTL turns expiring off.
 //
-// Delete expired entries every 1/100th of ttl value.
+// Delete expired entries every 1/100th of ttl value. Goroutine which deletes expired entries runs indefinitely.
 func NewLRU[K comparable, V any](size int, onEvict EvictCallback[K, V], ttl time.Duration) *LRU[K, V] {
 	if size < 0 {
 		size = 0
@@ -71,8 +71,10 @@ func NewLRU[K comparable, V any](size int, onEvict EvictCallback[K, V], ttl time
 		res.buckets[i] = bucket[K, V]{entries: make(map[K]*internal.Entry[K, V])}
 	}
 
-	// enable deleteExpired() running in separate goroutine for cache
-	// with non-zero TTL
+	// enable deleteExpired() running in separate goroutine for cache with non-zero TTL
+	//
+	// Important: done channel is never closed, so deleteExpired() goroutine will never exit,
+	// it's decided to add functionality to close it in the version later than v2.
 	if res.ttl != noEvictionTTL {
 		go func(done <-chan struct{}) {
 			ticker := time.NewTicker(res.ttl / numBuckets)
@@ -270,16 +272,16 @@ func (c *LRU[K, V]) Resize(size int) (evicted int) {
 }
 
 // Close destroys cleanup goroutine. To clean up the cache, run Purge() before Close().
-func (c *LRU[K, V]) Close() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	select {
-	case <-c.done:
-		return
-	default:
-	}
-	close(c.done)
-}
+// func (c *LRU[K, V]) Close() {
+//	c.mu.Lock()
+//	defer c.mu.Unlock()
+//	select {
+//	case <-c.done:
+//		return
+//	default:
+//	}
+//	close(c.done)
+// }
 
 // removeOldest removes the oldest item from the cache. Has to be called with lock!
 func (c *LRU[K, V]) removeOldest() {

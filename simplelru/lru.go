@@ -163,9 +163,6 @@ func (c *LRU[K, V]) Resize(size int) (evicted int) {
 	return diff
 }
 
-// Close does nothing for this type of cache.
-func (c *LRU[K, V]) Close() {}
-
 // removeOldest removes the oldest item from the cache.
 func (c *LRU[K, V]) removeOldest() {
 	if ent := c.evictList.Back(); ent != nil {

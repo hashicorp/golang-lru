@@ -68,7 +68,6 @@ func BenchmarkLRU_Freq_NoExpire(b *testing.B) {
 
 func BenchmarkLRU_Rand_WithExpire(b *testing.B) {
 	l := NewLRU[int64, int64](8192, nil, time.Millisecond*10)
-	defer l.Close()
 
 	trace := make([]int64, b.N*2)
 	for i := 0; i < b.N*2; i++ {
@@ -94,7 +93,6 @@ func BenchmarkLRU_Rand_WithExpire(b *testing.B) {
 
 func BenchmarkLRU_Freq_WithExpire(b *testing.B) {
 	l := NewLRU[int64, int64](8192, nil, time.Millisecond*10)
-	defer l.Close()
 
 	trace := make([]int64, b.N*2)
 	for i := 0; i < b.N*2; i++ {
@@ -195,7 +193,6 @@ func TestLRUEdgeCases(t *testing.T) {
 
 func TestLRU_Values(t *testing.T) {
 	lc := NewLRU[string, string](3, nil, 0)
-	defer lc.Close()
 
 	lc.Add("key1", "val1")
 	lc.Add("key2", "val2")
@@ -207,17 +204,16 @@ func TestLRU_Values(t *testing.T) {
 	}
 }
 
-func TestExpirableMultipleClose(_ *testing.T) {
-	lc := NewLRU[string, string](10, nil, 0)
-	lc.Close()
-	// should not panic
-	lc.Close()
-}
+// func TestExpirableMultipleClose(_ *testing.T) {
+//	lc := NewLRU[string, string](10, nil, 0)
+//	lc.Close()
+//	// should not panic
+//	lc.Close()
+// }
 
 func TestLRUWithPurge(t *testing.T) {
 	var evicted []string
 	lc := NewLRU(10, func(key string, value string) { evicted = append(evicted, key, value) }, 150*time.Millisecond)
-	defer lc.Close()
 
 	k, v, ok := lc.GetOldest()
 	if k != "" {
@@ -299,7 +295,6 @@ func TestLRUWithPurge(t *testing.T) {
 
 func TestLRUWithPurgeEnforcedBySize(t *testing.T) {
 	lc := NewLRU[string, string](10, nil, time.Hour)
-	defer lc.Close()
 
 	for i := 0; i < 100; i++ {
 		i := i
@@ -370,7 +365,6 @@ func TestLRUInvalidateAndEvict(t *testing.T) {
 
 func TestLoadingExpired(t *testing.T) {
 	lc := NewLRU[string, string](0, nil, time.Millisecond*5)
-	defer lc.Close()
 
 	lc.Add("key1", "val1")
 	if lc.Len() != 1 {
@@ -484,8 +478,6 @@ func TestLRURemoveOldest(t *testing.T) {
 func ExampleLRU() {
 	// make cache with 10ms TTL and 5 max keys
 	cache := NewLRU[string, string](5, nil, time.Millisecond*10)
-	// expirable cache need to be closed after used
-	defer cache.Close()
 
 	// set value under key1.
 	cache.Add("key1", "val1")
