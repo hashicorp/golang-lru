@@ -41,14 +41,14 @@ const noEvictionTTL = time.Hour * 24 * 365 * 10
 // casting it as uint8 explicitly requires type conversions in multiple places
 const numBuckets = 100
 
-// NewExpirableLRU returns a new thread-safe cache with expirable entries.
+// NewLRU returns a new thread-safe cache with expirable entries.
 //
 // Size parameter set to 0 makes cache of unlimited size, e.g. turns LRU mechanism off.
 //
 // Providing 0 TTL turns expiring off.
 //
 // Delete expired entries every 1/100th of ttl value.
-func NewExpirableLRU[K comparable, V any](size int, onEvict EvictCallback[K, V], ttl time.Duration) *LRU[K, V] {
+func NewLRU[K comparable, V any](size int, onEvict EvictCallback[K, V], ttl time.Duration) *LRU[K, V] {
 	if size < 0 {
 		size = 0
 	}
