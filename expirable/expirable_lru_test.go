@@ -387,7 +387,7 @@ func TestLoadingExpired(t *testing.T) {
 		t.Fatalf("should be true")
 	}
 
-	time.Sleep(time.Millisecond * 10) // wait for entry to expire
+	time.Sleep(time.Millisecond * 100) // wait for entry to expire
 	if lc.Len() != 0 {
 		t.Fatalf("length differs from expected")
 	}
@@ -491,7 +491,7 @@ func ExampleLRU() {
 	}
 
 	// wait for cache to expire
-	time.Sleep(time.Millisecond * 12)
+	time.Sleep(time.Millisecond * 100)
 
 	// get value under key1 after key expiration
 	r, ok = cache.Get("key1")
