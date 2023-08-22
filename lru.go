@@ -91,6 +91,28 @@ func (c *Cache[K, V]) Add(key K, value V) (evicted bool) {
 	return
 }
 
+// AddOrUpdate adds a value to the cache or if key already exists, it executes an update function. Returns true if an eviction occurred.
+func (c *Cache) AddOrUpdate(key, value interface{}, update func(v1, v2 interface{}) interface{}) (evicted bool) {
+	var k, v interface{}
+	c.lock.Lock()
+	oldValue, found := c.lru.Get(key)
+
+	if found {
+		value = update(oldValue, value)
+	}
+
+	evicted = c.lru.Add(key, value)
+	if c.onEvictedCB != nil && evicted {
+		k, v = c.evictedKeys[0], c.evictedVals[0]
+		c.evictedKeys, c.evictedVals = c.evictedKeys[:0], c.evictedVals[:0]
+	}
+	c.lock.Unlock()
+	if c.onEvictedCB != nil && evicted {
+		c.onEvictedCB(k, v)
+	}
+	return
+}
+
 // Get looks up a key's value from the cache.
 func (c *Cache[K, V]) Get(key K) (value V, ok bool) {
 	c.lock.Lock()
