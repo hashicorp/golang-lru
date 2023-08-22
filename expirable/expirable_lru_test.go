@@ -478,6 +478,43 @@ func TestLRURemoveOldest(t *testing.T) {
 	}
 }
 
+// https://github.com/hashicorp/golang-lru/issues/141
+// test highlighting behaviour of eviction of the key with changed value
+func TestCache_EvictionSameKey(t *testing.T) {
+	var evictedKeys []int
+
+	cache := NewLRU[int, struct{}](
+		2,
+		func(key int, _ struct{}) {
+			evictedKeys = append(evictedKeys, key)
+		},
+		0)
+
+	cache.Add(1, struct{}{})
+	if !reflect.DeepEqual(cache.Keys(), []int{1}) {
+		t.Fatalf("keys differs from expected: %v", cache.Keys())
+	}
+
+	cache.Add(2, struct{}{})
+	if !reflect.DeepEqual(cache.Keys(), []int{1, 2}) {
+		t.Fatalf("keys differs from expected: %v", cache.Keys())
+	}
+
+	cache.Add(1, struct{}{})
+	if !reflect.DeepEqual(cache.Keys(), []int{2, 1}) {
+		t.Fatalf("keys differs from expected: %v", cache.Keys())
+	}
+
+	cache.Add(3, struct{}{})
+	if !reflect.DeepEqual(cache.Keys(), []int{1, 3}) {
+		t.Fatalf("keys differs from expected: %v", cache.Keys())
+	}
+
+	if !reflect.DeepEqual(evictedKeys, []int{2}) {
+		t.Fatalf("evictedKeys differs from expected: %v", evictedKeys)
+	}
+}
+
 func ExampleLRU() {
 	// make cache with 10ms TTL and 5 max keys
 	cache := NewLRU[string, string](5, nil, time.Millisecond*10)
