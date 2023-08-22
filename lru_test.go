@@ -4,6 +4,7 @@
 package lru
 
 import (
+	"sync"
 	"testing"
 )
 
@@ -64,6 +65,32 @@ func BenchmarkLRU_Freq(b *testing.B) {
 		}
 	}
 	b.Logf("hit: %d miss: %d ratio: %f", hit, miss, float64(hit)/float64(hit+miss))
+}
+
+func TestThreadSafeLRU(t *testing.T) {
+	var (
+		wg    sync.WaitGroup
+		count = 100
+		size  = 50
+	)
+
+	l, err := New[int, int](size)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	for i := 0; i < count; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			l.Add(i, i)
+		}()
+	}
+	wg.Wait()
+	if l.Len() != size {
+		t.Fatalf("bad len: %v", l.Len())
+	}
 }
 
 func TestLRU(t *testing.T) {
