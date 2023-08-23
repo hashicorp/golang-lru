@@ -120,6 +120,10 @@ func (c *LRU[K, V]) Purge() {
 func (c *LRU[K, V]) Add(key K, value V) (evicted bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	return c.addWithLock(key, value)
+}
+
+func (c *LRU[K, V]) addWithLock(key K, value V) (evicted bool) {
 	now := time.Now()
 
 	// Check for existing item
@@ -149,6 +153,11 @@ func (c *LRU[K, V]) Add(key K, value V) (evicted bool) {
 func (c *LRU[K, V]) Get(key K) (value V, ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	return c.getWithLock(key)
+}
+
+// Get looks up a key's value from the cache.
+func (c *LRU[K, V]) getWithLock(key K) (value V, ok bool) {
 	var ent *internal.Entry[K, V]
 	if ent, ok = c.items[key]; ok {
 		// Expired item check
@@ -159,6 +168,22 @@ func (c *LRU[K, V]) Get(key K) (value V, ok bool) {
 		return ent.Value, true
 	}
 	return
+}
+
+func (c *LRU[K, V]) GetOrAdd(key K, new func() V) (value V, added bool, evicted bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if existingValue, exists := c.getWithLock(key); exists {
+		return existingValue, added, evicted
+	} else {
+		if new != nil {
+			value = new()
+		}
+		added = true
+		evicted = c.addWithLock(key, value)
+		return value, added, evicted
+	}
 }
 
 // Contains checks if a key is in the cache, without updating the recent-ness
