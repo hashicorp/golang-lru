@@ -400,7 +400,7 @@ func TestLoadingExpired(t *testing.T) {
 		}
 	}
 
-	time.Sleep(time.Millisecond * 2) // wait for expiration reaper
+	time.Sleep(time.Millisecond * 100) // wait for expiration reaper
 	if lc.Len() != 0 {
 		t.Fatalf("length differs from expected")
 	}
