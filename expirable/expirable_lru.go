@@ -153,7 +153,7 @@ func (c *LRU[K, V]) Get(key K) (value V, ok bool) {
 	if ent, ok = c.items[key]; ok {
 		// Expired item check
 		if time.Now().After(ent.ExpiresAt) {
-			return
+			return value, false
 		}
 		c.evictList.MoveToFront(ent)
 		return ent.Value, true
@@ -179,7 +179,7 @@ func (c *LRU[K, V]) Peek(key K) (value V, ok bool) {
 	if ent, ok = c.items[key]; ok {
 		// Expired item check
 		if time.Now().After(ent.ExpiresAt) {
-			return
+			return value, false
 		}
 		return ent.Value, true
 	}

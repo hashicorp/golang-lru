@@ -390,7 +390,17 @@ func TestLoadingExpired(t *testing.T) {
 		t.Fatalf("should be true")
 	}
 
-	time.Sleep(time.Millisecond * 100) // wait for entry to expire
+	for {
+		result, ok := lc.Get("key1")
+		if ok && result == "" {
+			t.Fatalf("ok should return a result")
+		}
+		if !ok {
+			break
+		}
+	}
+
+	time.Sleep(time.Millisecond * 2) // wait for expiration reaper
 	if lc.Len() != 0 {
 		t.Fatalf("length differs from expected")
 	}
