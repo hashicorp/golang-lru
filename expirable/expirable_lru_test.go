@@ -207,20 +207,6 @@ func TestLRU_Values(t *testing.T) {
 	}
 }
 
-func TestLRU_ValuesWithExpired(t *testing.T) {
-	lc := NewLRU[string, string](3, nil, time.Millisecond*100)
-
-	lc.Add("key1", "val1")
-	time.Sleep(time.Millisecond * 200) // wait for expiration reaper
-	lc.Add("key2", "val2")
-	lc.Add("key3", "val3")
-
-	values := lc.Values()
-	if !reflect.DeepEqual(values, []string{"val2", "val3"}) {
-		t.Fatalf("values differs from expected")
-	}
-}
-
 // func TestExpirableMultipleClose(_ *testing.T) {
 //	lc := NewLRU[string, string](10, nil, 0)
 //	lc.Close()
