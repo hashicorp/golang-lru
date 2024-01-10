@@ -220,11 +220,16 @@ func (c *LRU[K, V]) GetOldest() (key K, value V, ok bool) {
 }
 
 // Keys returns a slice of the keys in the cache, from oldest to newest.
+// Expired entries are filtered out.
 func (c *LRU[K, V]) Keys() []K {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	keys := make([]K, 0, len(c.items))
+	now := time.Now()
 	for ent := c.evictList.Back(); ent != nil; ent = ent.PrevEntry() {
+		if now.After(ent.ExpiresAt) {
+			continue
+		}
 		keys = append(keys, ent.Key)
 	}
 	return keys
@@ -235,15 +240,13 @@ func (c *LRU[K, V]) Keys() []K {
 func (c *LRU[K, V]) Values() []V {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	values := make([]V, len(c.items))
-	i := 0
+	values := make([]V, 0, len(c.items))
 	now := time.Now()
 	for ent := c.evictList.Back(); ent != nil; ent = ent.PrevEntry() {
 		if now.After(ent.ExpiresAt) {
 			continue
 		}
-		values[i] = ent.Value
-		i++
+		values = append(values, ent.Value)
 	}
 	return values
 }
