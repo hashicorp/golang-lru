@@ -4,6 +4,7 @@
 package lru
 
 import (
+	"reflect"
 	"testing"
 )
 
@@ -295,4 +296,151 @@ func TestLRUResize(t *testing.T) {
 	if !l.Contains(3) || !l.Contains(4) {
 		t.Errorf("Cache should have contained 2 elements")
 	}
+}
+
+func (c *Cache[K, V]) wantKeys(t *testing.T, want []K) {
+	t.Helper()
+	got := c.Keys()
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("wrong keys got: %v, want: %v ", got, want)
+	}
+}
+
+func TestCache_EvictionSameKey(t *testing.T) {
+	t.Run("Add", func(t *testing.T) {
+		var evictedKeys []int
+
+		cache, _ := NewWithEvict(
+			2,
+			func(key int, _ struct{}) {
+				evictedKeys = append(evictedKeys, key)
+			})
+
+		if evicted := cache.Add(1, struct{}{}); evicted {
+			t.Error("First 1: got unexpected eviction")
+		}
+		cache.wantKeys(t, []int{1})
+
+		if evicted := cache.Add(2, struct{}{}); evicted {
+			t.Error("2: got unexpected eviction")
+		}
+		cache.wantKeys(t, []int{1, 2})
+
+		if evicted := cache.Add(1, struct{}{}); evicted {
+			t.Error("Second 1: got unexpected eviction")
+		}
+		cache.wantKeys(t, []int{2, 1})
+
+		if evicted := cache.Add(3, struct{}{}); !evicted {
+			t.Error("3: did not get expected eviction")
+		}
+		cache.wantKeys(t, []int{1, 3})
+
+		want := []int{2}
+		if !reflect.DeepEqual(evictedKeys, want) {
+			t.Errorf("evictedKeys got: %v want: %v", evictedKeys, want)
+		}
+	})
+
+	t.Run("ContainsOrAdd", func(t *testing.T) {
+		var evictedKeys []int
+
+		cache, _ := NewWithEvict(
+			2,
+			func(key int, _ struct{}) {
+				evictedKeys = append(evictedKeys, key)
+			})
+
+		contained, evicted := cache.ContainsOrAdd(1, struct{}{})
+		if contained {
+			t.Error("First 1: got unexpected contained")
+		}
+		if evicted {
+			t.Error("First 1: got unexpected eviction")
+		}
+		cache.wantKeys(t, []int{1})
+
+		contained, evicted = cache.ContainsOrAdd(2, struct{}{})
+		if contained {
+			t.Error("2: got unexpected contained")
+		}
+		if evicted {
+			t.Error("2: got unexpected eviction")
+		}
+		cache.wantKeys(t, []int{1, 2})
+
+		contained, evicted = cache.ContainsOrAdd(1, struct{}{})
+		if !contained {
+			t.Error("Second 1: did not get expected contained")
+		}
+		if evicted {
+			t.Error("Second 1: got unexpected eviction")
+		}
+		cache.wantKeys(t, []int{1, 2})
+
+		contained, evicted = cache.ContainsOrAdd(3, struct{}{})
+		if contained {
+			t.Error("3: got unexpected contained")
+		}
+		if !evicted {
+			t.Error("3: did not get expected eviction")
+		}
+		cache.wantKeys(t, []int{2, 3})
+
+		want := []int{1}
+		if !reflect.DeepEqual(evictedKeys, want) {
+			t.Errorf("evictedKeys got: %v want: %v", evictedKeys, want)
+		}
+	})
+
+	t.Run("PeekOrAdd", func(t *testing.T) {
+		var evictedKeys []int
+
+		cache, _ := NewWithEvict(
+			2,
+			func(key int, _ struct{}) {
+				evictedKeys = append(evictedKeys, key)
+			})
+
+		_, contained, evicted := cache.PeekOrAdd(1, struct{}{})
+		if contained {
+			t.Error("First 1: got unexpected contained")
+		}
+		if evicted {
+			t.Error("First 1: got unexpected eviction")
+		}
+		cache.wantKeys(t, []int{1})
+
+		_, contained, evicted = cache.PeekOrAdd(2, struct{}{})
+		if contained {
+			t.Error("2: got unexpected contained")
+		}
+		if evicted {
+			t.Error("2: got unexpected eviction")
+		}
+		cache.wantKeys(t, []int{1, 2})
+
+		_, contained, evicted = cache.PeekOrAdd(1, struct{}{})
+		if !contained {
+			t.Error("Second 1: did not get expected contained")
+		}
+		if evicted {
+			t.Error("Second 1: got unexpected eviction")
+		}
+		cache.wantKeys(t, []int{1, 2})
+
+		_, contained, evicted = cache.PeekOrAdd(3, struct{}{})
+		if contained {
+			t.Error("3: got unexpected contained")
+		}
+		if !evicted {
+			t.Error("3: did not get expected eviction")
+		}
+		cache.wantKeys(t, []int{2, 3})
+
+		want := []int{1}
+		if !reflect.DeepEqual(evictedKeys, want) {
+			t.Errorf("evictedKeys got: %v want: %v", evictedKeys, want)
+		}
+	})
 }

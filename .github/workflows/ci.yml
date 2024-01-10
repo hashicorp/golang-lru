@@ -22,11 +22,21 @@ jobs:
 
       - name: build and test
         run: |
+          go test -timeout=60s -race ./...
+          go build -race ./...
+
+      - name: build and test ARC
+        working-directory: ./arc
+        run: |
           go test -timeout=60s -race
           go build -race
 
       - name: install golangci-lint
-        run: curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b $GITHUB_WORKSPACE v1.50.1
+        run: curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b $GITHUB_WORKSPACE v1.53.3
 
       - name: run golangci-lint
-        run: $GITHUB_WORKSPACE/golangci-lint run --out-format=github-actions
+        run: $GITHUB_WORKSPACE/golangci-lint run --out-format=github-actions ./... ./simplelru/... ./expirable/...
+
+      - name: run golangci-lint on ARC
+        working-directory: ./arc
+        run: $GITHUB_WORKSPACE/golangci-lint run --out-format=github-actions ./...
