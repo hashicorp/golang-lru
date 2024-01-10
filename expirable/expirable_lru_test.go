@@ -425,6 +425,10 @@ func TestLoadingExpired(t *testing.T) {
 func TestLRURemoveOldest(t *testing.T) {
 	lc := NewLRU[string, string](2, nil, 0)
 
+	if lc.Cap() != 2 {
+		t.Fatalf("expect cap is 2")
+	}
+
 	k, v, ok := lc.RemoveOldest()
 	if k != "" {
 		t.Fatalf("should be empty")

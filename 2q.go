@@ -175,6 +175,11 @@ func (c *TwoQueueCache[K, V]) Len() int {
 	return c.recent.Len() + c.frequent.Len()
 }
 
+// Cap returns the capacity of the cache
+func (c *TwoQueueCache[K, V]) Cap() int {
+	return c.size
+}
+
 // Resize changes the cache size.
 func (c *TwoQueueCache[K, V]) Resize(size int) (evicted int) {
 	c.lock.Lock()
