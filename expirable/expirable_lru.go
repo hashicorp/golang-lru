@@ -336,3 +336,8 @@ func (c *LRU[K, V]) addToBucket(e *internal.Entry[K, V]) {
 func (c *LRU[K, V]) removeFromBucket(e *internal.Entry[K, V]) {
 	delete(c.buckets[e.ExpireBucket].entries, e.Key)
 }
+
+// Cap returns the capacity of the cache
+func (c *LRU[K, V]) Cap() int {
+	return c.size
+}
