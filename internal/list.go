@@ -4,9 +4,7 @@
 
 package internal
 
-import (
-	"time"
-)
+import "time"
 
 // Entry is an LRU Entry
 type Entry[K comparable, V any] struct {
@@ -32,7 +30,7 @@ type Entry[K comparable, V any] struct {
 	// The expiry bucket item was put in, optional
 	ExpireBucket uint8
 
-	// Visited to keep track of entries for sieve-eviction
+	// Visited to keep track if an entry has been recently accessed, used for sieve-eviction
 	Visited bool
 }
 
