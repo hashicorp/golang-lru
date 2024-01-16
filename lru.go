@@ -28,6 +28,11 @@ func New[K comparable, V any](size int) (*Cache[K, V], error) {
 	return NewWithEvict[K, V](size, nil)
 }
 
+// NewSieve creates an LRU of the given size.
+func NewSieve[K comparable, V any](size int) (*Cache[K, V], error) {
+	return NewSieveWithEvict[K, V](size, nil)
+}
+
 // NewWithEvict constructs a fixed size cache with the given eviction
 // callback.
 func NewWithEvict[K comparable, V any](size int, onEvicted func(key K, value V)) (c *Cache[K, V], err error) {
@@ -40,6 +45,21 @@ func NewWithEvict[K comparable, V any](size int, onEvicted func(key K, value V))
 		onEvicted = c.onEvicted
 	}
 	c.lru, err = simplelru.NewLRU(size, onEvicted)
+	return
+}
+
+// NewSieveWithEvict constructs a fixed size cache with the given eviction
+// callback.
+func NewSieveWithEvict[K comparable, V any](size int, onEvicted func(key K, value V)) (c *Cache[K, V], err error) {
+	// create a cache with default settings
+	c = &Cache[K, V]{
+		onEvictedCB: onEvicted,
+	}
+	if onEvicted != nil {
+		c.initEvictBuffers()
+		onEvicted = c.onEvicted
+	}
+	c.lru, err = simplelru.NewSieve(size, onEvicted)
 	return
 }
 
