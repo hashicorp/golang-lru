@@ -12,8 +12,8 @@ import (
 // EvictCallback is used to get a callback when a cache entry is evicted
 type EvictCallback[K comparable, V any] func(key K, value V)
 
-// LRU implements a non-thread safe fixed size LRU cache
-type LRU[K comparable, V any] struct {
+// Cache implements a non-thread safe fixed cache with Cache and SIEVE eviction (https://cachemon.github.io/SIEVE-website/)
+type Cache[K comparable, V any] struct {
 	size      int
 	evictList *internal.LruList[K, V]
 	items     map[K]*internal.Entry[K, V]
@@ -23,12 +23,12 @@ type LRU[K comparable, V any] struct {
 }
 
 // NewLRU constructs an LRU of the given size
-func NewLRU[K comparable, V any](size int, onEvict EvictCallback[K, V]) (*LRU[K, V], error) {
+func NewLRU[K comparable, V any](size int, onEvict EvictCallback[K, V]) (*Cache[K, V], error) {
 	if size <= 0 {
 		return nil, errors.New("must provide a positive size")
 	}
 
-	c := &LRU[K, V]{
+	c := &Cache[K, V]{
 		size:      size,
 		evictList: internal.NewList[K, V](),
 		items:     make(map[K]*internal.Entry[K, V]),
@@ -38,13 +38,13 @@ func NewLRU[K comparable, V any](size int, onEvict EvictCallback[K, V]) (*LRU[K,
 	return c, nil
 }
 
-// NewSieve constructs an LRU of the given size
-func NewSieve[K comparable, V any](size int, onEvict EvictCallback[K, V]) (*LRU[K, V], error) {
+// NewSieve constructs a SIEVE of the given size
+func NewSieve[K comparable, V any](size int, onEvict EvictCallback[K, V]) (*Cache[K, V], error) {
 	if size <= 0 {
 		return nil, errors.New("must provide a positive size")
 	}
 
-	c := &LRU[K, V]{
+	c := &Cache[K, V]{
 		size:      size,
 		evictList: internal.NewList[K, V](),
 		items:     make(map[K]*internal.Entry[K, V]),
@@ -57,7 +57,7 @@ func NewSieve[K comparable, V any](size int, onEvict EvictCallback[K, V]) (*LRU[
 }
 
 // Purge is used to completely clear the cache.
-func (c *LRU[K, V]) Purge() {
+func (c *Cache[K, V]) Purge() {
 	for k, v := range c.items {
 		if c.onEvict != nil {
 			c.onEvict(k, v.Value)
@@ -68,7 +68,7 @@ func (c *LRU[K, V]) Purge() {
 }
 
 // Add adds a value to the cache.  Returns true if an eviction occurred.
-func (c *LRU[K, V]) Add(key K, value V) (evicted bool) {
+func (c *Cache[K, V]) Add(key K, value V) (evicted bool) {
 	// Check for existing item
 	if ent, ok := c.items[key]; ok {
 		if c.useSieve {
@@ -106,7 +106,7 @@ func (c *LRU[K, V]) Add(key K, value V) (evicted bool) {
 }
 
 // Get looks up a key's value from the cache.
-func (c *LRU[K, V]) Get(key K) (value V, ok bool) {
+func (c *Cache[K, V]) Get(key K) (value V, ok bool) {
 	if ent, ok := c.items[key]; ok {
 		if c.useSieve {
 			ent.Visited = true
@@ -121,14 +121,14 @@ func (c *LRU[K, V]) Get(key K) (value V, ok bool) {
 
 // Contains checks if a key is in the cache, without updating the recent-ness
 // or deleting it for being stale.
-func (c *LRU[K, V]) Contains(key K) (ok bool) {
+func (c *Cache[K, V]) Contains(key K) (ok bool) {
 	_, ok = c.items[key]
 	return ok
 }
 
 // Peek returns the key value (or undefined if not found) without updating
 // the "recently used"-ness of the key.
-func (c *LRU[K, V]) Peek(key K) (value V, ok bool) {
+func (c *Cache[K, V]) Peek(key K) (value V, ok bool) {
 	var ent *internal.Entry[K, V]
 	if ent, ok = c.items[key]; ok {
 		return ent.Value, true
@@ -137,7 +137,7 @@ func (c *LRU[K, V]) Peek(key K) (value V, ok bool) {
 }
 
 // visited returns if the key is visited
-func (c *LRU[K, V]) visited(key K) (present bool, visited bool) {
+func (c *Cache[K, V]) visited(key K) (present bool, visited bool) {
 	var ent *internal.Entry[K, V]
 	if ent, present = c.items[key]; present {
 		visited = ent.Visited
@@ -148,7 +148,7 @@ func (c *LRU[K, V]) visited(key K) (present bool, visited bool) {
 
 // Remove removes the provided key from the cache, returning if the
 // key was contained.
-func (c *LRU[K, V]) Remove(key K) (present bool) {
+func (c *Cache[K, V]) Remove(key K) (present bool) {
 	if ent, ok := c.items[key]; ok {
 		c.removeElement(ent)
 		return true
@@ -157,7 +157,7 @@ func (c *LRU[K, V]) Remove(key K) (present bool) {
 }
 
 // RemoveOldest removes the oldest item from the cache.
-func (c *LRU[K, V]) RemoveOldest() (key K, value V, ok bool) {
+func (c *Cache[K, V]) RemoveOldest() (key K, value V, ok bool) {
 	if c.useSieve {
 		return c.performSieveEviction()
 	}
@@ -170,7 +170,7 @@ func (c *LRU[K, V]) RemoveOldest() (key K, value V, ok bool) {
 }
 
 // GetOldest returns the oldest entry
-func (c *LRU[K, V]) GetOldest() (key K, value V, ok bool) {
+func (c *Cache[K, V]) GetOldest() (key K, value V, ok bool) {
 	if c.useSieve {
 		c.getSieveCandidate()
 		if c.hand != nil {
@@ -187,7 +187,7 @@ func (c *LRU[K, V]) GetOldest() (key K, value V, ok bool) {
 }
 
 // Keys returns a slice of the keys in the cache, from oldest to newest.
-func (c *LRU[K, V]) Keys() []K {
+func (c *Cache[K, V]) Keys() []K {
 	keys := make([]K, c.evictList.Length())
 	i := 0
 	for ent := c.evictList.Back(); ent != nil; ent = ent.PrevEntry() {
@@ -198,7 +198,7 @@ func (c *LRU[K, V]) Keys() []K {
 }
 
 // Values returns a slice of the values in the cache, from oldest to newest.
-func (c *LRU[K, V]) Values() []V {
+func (c *Cache[K, V]) Values() []V {
 	values := make([]V, len(c.items))
 	i := 0
 	for ent := c.evictList.Back(); ent != nil; ent = ent.PrevEntry() {
@@ -209,17 +209,17 @@ func (c *LRU[K, V]) Values() []V {
 }
 
 // Len returns the number of items in the cache.
-func (c *LRU[K, V]) Len() int {
+func (c *Cache[K, V]) Len() int {
 	return c.evictList.Length()
 }
 
 // Cap returns the capacity of the cache
-func (c *LRU[K, V]) Cap() int {
+func (c *Cache[K, V]) Cap() int {
 	return c.size
 }
 
 // Resize changes the cache size.
-func (c *LRU[K, V]) Resize(size int) (evicted int) {
+func (c *Cache[K, V]) Resize(size int) (evicted int) {
 	diff := c.Len() - size
 	if diff < 0 {
 		diff = 0
@@ -237,7 +237,7 @@ func (c *LRU[K, V]) Resize(size int) (evicted int) {
 }
 
 // performSieveEviction - runs a eviction by running Sieve Algorithm and returns the evicted value.
-func (c *LRU[K, V]) performSieveEviction() (key K, value V, ok bool) {
+func (c *Cache[K, V]) performSieveEviction() (key K, value V, ok bool) {
 	c.getSieveCandidate()
 	if c.hand != nil {
 		candidate := c.hand
@@ -250,7 +250,7 @@ func (c *LRU[K, V]) performSieveEviction() (key K, value V, ok bool) {
 }
 
 // getSieveCandidate evicts an entry based on sieve algorithm.
-func (c *LRU[K, V]) getSieveCandidate() {
+func (c *Cache[K, V]) getSieveCandidate() {
 	if c.Len() == 0 {
 		return
 	}
@@ -269,7 +269,7 @@ func (c *LRU[K, V]) getSieveCandidate() {
 }
 
 // removeOldest removes the oldest item from the cache.
-func (c *LRU[K, V]) removeOldest() {
+func (c *Cache[K, V]) removeOldest() {
 	if c.useSieve {
 		c.performSieveEviction()
 		return
@@ -281,7 +281,7 @@ func (c *LRU[K, V]) removeOldest() {
 }
 
 // removeElement is used to remove a given list element from the cache
-func (c *LRU[K, V]) removeElement(e *internal.Entry[K, V]) {
+func (c *Cache[K, V]) removeElement(e *internal.Entry[K, V]) {
 	c.evictList.Remove(e)
 	delete(c.items, e.Key)
 	if c.onEvict != nil {
