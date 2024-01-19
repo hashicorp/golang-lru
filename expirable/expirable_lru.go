@@ -170,19 +170,26 @@ func (c *LRU[K, V]) getWithLock(key K) (value V, ok bool) {
 	return
 }
 
-func (c *LRU[K, V]) GetOrAdd(key K, new func() V) (value V, added bool, evicted bool) {
+type ConstructorFunc[V any] func() (V, error)
+
+// GetOrAddFunc looks up a key's value from the cache. If not present, the
+// ConstructorFunc argument is executed to create an entry and add it.
+func (c *LRU[K, V]) GetOrAddFunc(key K, fn ConstructorFunc[V]) (value V, added bool, evicted bool, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if existingValue, exists := c.getWithLock(key); exists {
-		return existingValue, added, evicted
+		return existingValue, added, evicted, nil
 	} else {
-		if new != nil {
-			value = new()
+		if fn != nil {
+			value, err = fn()
+			if err != nil {
+				return value, false, false, err
+			}
 		}
 		added = true
 		evicted = c.addWithLock(key, value)
-		return value, added, evicted
+		return value, added, evicted, nil
 	}
 }
 
