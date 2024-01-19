@@ -218,6 +218,75 @@ func Test2Q_Add_RecentEvict(t *testing.T) {
 	}
 }
 
+func Test2Q_Resize(t *testing.T) {
+	l, err := New2Q[int, int](100)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	// Touch all the entries, should be in t1
+	for i := 0; i < 100; i++ {
+		l.Add(i, i)
+	}
+
+	evicted := l.Resize(50)
+	if evicted != 50 {
+		t.Fatalf("bad: %d", evicted)
+	}
+
+	if n := l.recent.Len(); n != 50 {
+		t.Fatalf("bad: %d", n)
+	}
+	if n := l.frequent.Len(); n != 0 {
+		t.Fatalf("bad: %d", n)
+	}
+
+	l, err = New2Q[int, int](100)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	for i := 0; i < 100; i++ {
+		l.Add(i, i)
+	}
+
+	for i := 0; i < 50; i++ {
+		l.Add(i, i)
+	}
+
+	evicted = l.Resize(50)
+	if evicted != 50 {
+		t.Fatalf("bad: %d", evicted)
+	}
+
+	if n := l.recent.Len(); n != 12 {
+		t.Fatalf("bad: %d", n)
+	}
+	if n := l.frequent.Len(); n != 38 {
+		t.Fatalf("bad: %d", n)
+	}
+
+	l, err = New2Q[int, int](100)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	for i := 0; i < 100; i++ {
+		l.Add(i, i)
+		l.Add(i, i)
+	}
+
+	evicted = l.Resize(50)
+	if evicted != 50 {
+		t.Fatalf("bad: %d", evicted)
+	}
+
+	if n := l.recent.Len(); n != 0 {
+		t.Fatalf("bad: %d", n)
+	}
+	if n := l.frequent.Len(); n != 50 {
+		t.Fatalf("bad: %d", n)
+	}
+}
+
 func Test2Q(t *testing.T) {
 	l, err := New2Q[int, int](128)
 	if err != nil {
