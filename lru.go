@@ -66,7 +66,7 @@ func WithSieve[K comparable, V any]() SieveOption[K, V] {
 // SieveOption is used to set options for the Sieve cache.
 type SieveOption[K comparable, V any] func(*Cache[K, V])
 
-// NewSieveWithOpts helps create a LRU cache with option with options.
+// NewSieveWithOpts helps create a LRU cache with options.
 func NewSieveWithOpts[K comparable, V any](size int, opts ...SieveOption[K, V]) (c *Cache[K, V], err error) {
 	// create a cache with default settings
 	c = &Cache[K, V]{}
