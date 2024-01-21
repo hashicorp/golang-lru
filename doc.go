@@ -3,8 +3,8 @@
 
 // Package lru provides three different LRU caches of varying sophistication.
 //
-// Cache is a simple cache with LRU and SIEVE eviction. The LRU is based on the LRU
-// implementation in groupcache: https://github.com/golang/groupcache/tree/master/lru
+// Cache is a simple LRU cache. It is based on the LRU implementation in
+// groupcache: https://github.com/golang/groupcache/tree/master/lru
 //
 // TwoQueueCache tracks frequently used and recently used entries separately.
 // This avoids a burst of accesses from taking out frequently used entries, at
