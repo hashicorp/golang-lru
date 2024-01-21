@@ -16,21 +16,17 @@ const (
 
 // Cache is a thread-safe fixed size LRU cache.
 type Cache[K comparable, V any] struct {
-	cache       *simplelru.Cache[K, V]
+	lru         *simplelru.LRU[K, V]
 	evictedKeys []K
 	evictedVals []V
 	onEvictedCB func(k K, v V)
 	lock        sync.RWMutex
+	sieveOpt    bool
 }
 
 // New creates an LRU of the given size.
 func New[K comparable, V any](size int) (*Cache[K, V], error) {
 	return NewWithEvict[K, V](size, nil)
-}
-
-// NewSieve creates fixed size cache with SIEVE eviction. https://cachemon.github.io/SIEVE-website/
-func NewSieve[K comparable, V any](size int) (*Cache[K, V], error) {
-	return NewSieveWithEvict[K, V](size, nil)
 }
 
 // NewWithEvict constructs a fixed size cache with the given eviction
@@ -44,23 +40,48 @@ func NewWithEvict[K comparable, V any](size int, onEvicted func(key K, value V))
 		c.initEvictBuffers()
 		onEvicted = c.onEvicted
 	}
-	c.cache, err = simplelru.NewLRU(size, onEvicted)
+	c.lru, err = simplelru.NewLRU(size, onEvicted)
 	return
 }
 
-// NewSieveWithEvict constructs a fixed size cache with the given eviction
-// callback.
-func NewSieveWithEvict[K comparable, V any](size int, onEvicted func(key K, value V)) (c *Cache[K, V], err error) {
+// WithCallback returns a SieveOption with eviction callback.
+func WithCallback[K comparable, V any](onEvicted func(key K, value V)) SieveOption[K, V] {
+	return func(c *Cache[K, V]) {
+		c.onEvictedCB = onEvicted
+
+		if onEvicted != nil {
+			c.initEvictBuffers()
+			onEvicted = c.onEvicted
+		}
+	}
+}
+
+// WithSieve returns a SieveOption that enables sieve
+func WithSieve[K comparable, V any]() SieveOption[K, V] {
+	return func(c *Cache[K, V]) {
+		c.sieveOpt = true
+	}
+}
+
+// SieveOption is used to set options for the Sieve cache.
+type SieveOption[K comparable, V any] func(*Cache[K, V])
+
+// NewSieveWithOpts helps create a LRU cache with option with options.
+func NewSieveWithOpts[K comparable, V any](size int, opts ...SieveOption[K, V]) (c *Cache[K, V], err error) {
 	// create a cache with default settings
-	c = &Cache[K, V]{
-		onEvictedCB: onEvicted,
+	c = &Cache[K, V]{}
+
+	for _, opt := range opts {
+		opt(c)
 	}
-	if onEvicted != nil {
-		c.initEvictBuffers()
-		onEvicted = c.onEvicted
+
+	if c.sieveOpt {
+		c.lru, err = simplelru.NewSieve(size, c.onEvictedCB)
+	} else {
+		c.lru, err = simplelru.NewLRU(size, c.onEvictedCB)
 	}
-	c.cache, err = simplelru.NewSieve(size, onEvicted)
-	return
+
+	return c, err
 }
 
 func (c *Cache[K, V]) initEvictBuffers() {
@@ -80,7 +101,7 @@ func (c *Cache[K, V]) Purge() {
 	var ks []K
 	var vs []V
 	c.lock.Lock()
-	c.cache.Purge()
+	c.lru.Purge()
 	if c.onEvictedCB != nil && len(c.evictedKeys) > 0 {
 		ks, vs = c.evictedKeys, c.evictedVals
 		c.initEvictBuffers()
@@ -99,7 +120,7 @@ func (c *Cache[K, V]) Add(key K, value V) (evicted bool) {
 	var k K
 	var v V
 	c.lock.Lock()
-	evicted = c.cache.Add(key, value)
+	evicted = c.lru.Add(key, value)
 	if c.onEvictedCB != nil && evicted {
 		k, v = c.evictedKeys[0], c.evictedVals[0]
 		c.evictedKeys, c.evictedVals = c.evictedKeys[:0], c.evictedVals[:0]
@@ -114,7 +135,7 @@ func (c *Cache[K, V]) Add(key K, value V) (evicted bool) {
 // Get looks up a key's value from the cache.
 func (c *Cache[K, V]) Get(key K) (value V, ok bool) {
 	c.lock.Lock()
-	value, ok = c.cache.Get(key)
+	value, ok = c.lru.Get(key)
 	c.lock.Unlock()
 	return value, ok
 }
@@ -123,7 +144,7 @@ func (c *Cache[K, V]) Get(key K) (value V, ok bool) {
 // recent-ness or deleting it for being stale.
 func (c *Cache[K, V]) Contains(key K) bool {
 	c.lock.RLock()
-	containKey := c.cache.Contains(key)
+	containKey := c.lru.Contains(key)
 	c.lock.RUnlock()
 	return containKey
 }
@@ -132,7 +153,7 @@ func (c *Cache[K, V]) Contains(key K) bool {
 // the "recently used"-ness of the key.
 func (c *Cache[K, V]) Peek(key K) (value V, ok bool) {
 	c.lock.RLock()
-	value, ok = c.cache.Peek(key)
+	value, ok = c.lru.Peek(key)
 	c.lock.RUnlock()
 	return value, ok
 }
@@ -144,11 +165,11 @@ func (c *Cache[K, V]) ContainsOrAdd(key K, value V) (ok, evicted bool) {
 	var k K
 	var v V
 	c.lock.Lock()
-	if c.cache.Contains(key) {
+	if c.lru.Contains(key) {
 		c.lock.Unlock()
 		return true, false
 	}
-	evicted = c.cache.Add(key, value)
+	evicted = c.lru.Add(key, value)
 	if c.onEvictedCB != nil && evicted {
 		k, v = c.evictedKeys[0], c.evictedVals[0]
 		c.evictedKeys, c.evictedVals = c.evictedKeys[:0], c.evictedVals[:0]
@@ -167,12 +188,12 @@ func (c *Cache[K, V]) PeekOrAdd(key K, value V) (previous V, ok, evicted bool) {
 	var k K
 	var v V
 	c.lock.Lock()
-	previous, ok = c.cache.Peek(key)
+	previous, ok = c.lru.Peek(key)
 	if ok {
 		c.lock.Unlock()
 		return previous, true, false
 	}
-	evicted = c.cache.Add(key, value)
+	evicted = c.lru.Add(key, value)
 	if c.onEvictedCB != nil && evicted {
 		k, v = c.evictedKeys[0], c.evictedVals[0]
 		c.evictedKeys, c.evictedVals = c.evictedKeys[:0], c.evictedVals[:0]
@@ -189,7 +210,7 @@ func (c *Cache[K, V]) Remove(key K) (present bool) {
 	var k K
 	var v V
 	c.lock.Lock()
-	present = c.cache.Remove(key)
+	present = c.lru.Remove(key)
 	if c.onEvictedCB != nil && present {
 		k, v = c.evictedKeys[0], c.evictedVals[0]
 		c.evictedKeys, c.evictedVals = c.evictedKeys[:0], c.evictedVals[:0]
@@ -206,7 +227,7 @@ func (c *Cache[K, V]) Resize(size int) (evicted int) {
 	var ks []K
 	var vs []V
 	c.lock.Lock()
-	evicted = c.cache.Resize(size)
+	evicted = c.lru.Resize(size)
 	if c.onEvictedCB != nil && evicted > 0 {
 		ks, vs = c.evictedKeys, c.evictedVals
 		c.initEvictBuffers()
@@ -225,7 +246,7 @@ func (c *Cache[K, V]) RemoveOldest() (key K, value V, ok bool) {
 	var k K
 	var v V
 	c.lock.Lock()
-	key, value, ok = c.cache.RemoveOldest()
+	key, value, ok = c.lru.RemoveOldest()
 	if c.onEvictedCB != nil && ok {
 		k, v = c.evictedKeys[0], c.evictedVals[0]
 		c.evictedKeys, c.evictedVals = c.evictedKeys[:0], c.evictedVals[:0]
@@ -240,7 +261,7 @@ func (c *Cache[K, V]) RemoveOldest() (key K, value V, ok bool) {
 // GetOldest returns the oldest entry
 func (c *Cache[K, V]) GetOldest() (key K, value V, ok bool) {
 	c.lock.RLock()
-	key, value, ok = c.cache.GetOldest()
+	key, value, ok = c.lru.GetOldest()
 	c.lock.RUnlock()
 	return
 }
@@ -248,7 +269,7 @@ func (c *Cache[K, V]) GetOldest() (key K, value V, ok bool) {
 // Keys returns a slice of the keys in the cache, from oldest to newest.
 func (c *Cache[K, V]) Keys() []K {
 	c.lock.RLock()
-	keys := c.cache.Keys()
+	keys := c.lru.Keys()
 	c.lock.RUnlock()
 	return keys
 }
@@ -256,7 +277,7 @@ func (c *Cache[K, V]) Keys() []K {
 // Values returns a slice of the values in the cache, from oldest to newest.
 func (c *Cache[K, V]) Values() []V {
 	c.lock.RLock()
-	values := c.cache.Values()
+	values := c.lru.Values()
 	c.lock.RUnlock()
 	return values
 }
@@ -264,12 +285,12 @@ func (c *Cache[K, V]) Values() []V {
 // Len returns the number of items in the cache.
 func (c *Cache[K, V]) Len() int {
 	c.lock.RLock()
-	length := c.cache.Len()
+	length := c.lru.Len()
 	c.lock.RUnlock()
 	return length
 }
 
 // Cap returns the capacity of the cache
 func (c *Cache[K, V]) Cap() int {
-	return c.cache.Cap()
+	return c.lru.Cap()
 }

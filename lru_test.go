@@ -43,7 +43,7 @@ func Benchmark_Rand(b *testing.B) {
 	})
 
 	b.Run("Benchmark with Sieve ", func(b *testing.B) {
-		l, err := NewSieve[int64, int64](8192)
+		l, err := NewSieveWithOpts[int64, int64](8192, WithSieve[int64, int64]())
 		if err != nil {
 			b.Fatalf("err: %v", err)
 		}
@@ -89,7 +89,7 @@ func BenchmarkLRU_Freq(b *testing.B) {
 	})
 
 	b.Run("Benchmark with Sieve ", func(b *testing.B) {
-		l, err := NewSieve[int64, int64](8192)
+		l, err := NewSieveWithOpts[int64, int64](8192)
 		if err != nil {
 			b.Fatalf("err: %v", err)
 		}
