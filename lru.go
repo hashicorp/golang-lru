@@ -47,7 +47,7 @@ func NewWithEvict[K comparable, V any](size int, onEvicted func(key K, value V))
 }
 
 // WithCallback returns a SieveOption with eviction callback.
-func WithCallback[K comparable, V any](onEvicted func(key K, value V)) SieveOption[K, V] {
+func WithCallback[K comparable, V any](onEvicted func(key K, value V)) Option[K, V] {
 	return func(c *Cache[K, V]) {
 		c.onEvictedCB = onEvicted
 
@@ -58,17 +58,17 @@ func WithCallback[K comparable, V any](onEvicted func(key K, value V)) SieveOpti
 }
 
 // WithSieve returns a SieveOption that enables sieve
-func WithSieve[K comparable, V any]() SieveOption[K, V] {
+func WithSieve[K comparable, V any]() Option[K, V] {
 	return func(c *Cache[K, V]) {
 		c.sieveOpt = true
 	}
 }
 
-// SieveOption is used to set options for the Sieve cache.
-type SieveOption[K comparable, V any] func(*Cache[K, V])
+// Option is used to set options for the cache.
+type Option[K comparable, V any] func(*Cache[K, V])
 
 // NewWithOpts helps create a LRU cache with option with options.
-func NewWithOpts[K comparable, V any](size int, opts ...SieveOption[K, V]) (c *Cache[K, V], err error) {
+func NewWithOpts[K comparable, V any](size int, opts ...Option[K, V]) (c *Cache[K, V], err error) {
 	// create a cache with default settings
 	c = &Cache[K, V]{
 		onEvictedCB: nil,
