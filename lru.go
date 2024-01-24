@@ -36,10 +36,12 @@ func NewWithEvict[K comparable, V any](size int, onEvicted func(key K, value V))
 	c = &Cache[K, V]{
 		onEvictedCB: onEvicted,
 	}
+
 	if onEvicted != nil {
 		c.initEvictBuffers()
 		onEvicted = c.onEvicted
 	}
+
 	c.lru, err = simplelru.NewLRU(size, onEvicted)
 	return
 }
@@ -51,7 +53,6 @@ func WithCallback[K comparable, V any](onEvicted func(key K, value V)) SieveOpti
 
 		if onEvicted != nil {
 			c.initEvictBuffers()
-			onEvicted = c.onEvicted
 		}
 	}
 }
@@ -66,21 +67,22 @@ func WithSieve[K comparable, V any]() SieveOption[K, V] {
 // SieveOption is used to set options for the Sieve cache.
 type SieveOption[K comparable, V any] func(*Cache[K, V])
 
-// NewSieveWithOpts helps create a LRU cache with option with options.
-func NewSieveWithOpts[K comparable, V any](size int, opts ...SieveOption[K, V]) (c *Cache[K, V], err error) {
+// NewWithOpts helps create a LRU cache with option with options.
+func NewWithOpts[K comparable, V any](size int, opts ...SieveOption[K, V]) (c *Cache[K, V], err error) {
 	// create a cache with default settings
-	c = &Cache[K, V]{}
+	c = &Cache[K, V]{
+		onEvictedCB: nil,
+	}
 
 	for _, opt := range opts {
 		opt(c)
 	}
 
 	if c.sieveOpt {
-		c.lru, err = simplelru.NewSieve(size, c.onEvictedCB)
+		c.lru, err = simplelru.NewSieve(size, c.onEvicted)
 	} else {
-		c.lru, err = simplelru.NewLRU(size, c.onEvictedCB)
+		c.lru, err = simplelru.NewLRU(size, c.onEvicted)
 	}
-
 	return c, err
 }
 
