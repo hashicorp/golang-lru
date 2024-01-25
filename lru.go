@@ -46,7 +46,7 @@ func NewWithEvict[K comparable, V any](size int, onEvicted func(key K, value V))
 	return
 }
 
-// WithCallback returns a SieveOption with eviction callback.
+// WithCallback returns a Option with eviction callback.
 func WithCallback[K comparable, V any](onEvicted func(key K, value V)) Option[K, V] {
 	return func(c *Cache[K, V]) {
 		c.onEvictedCB = onEvicted
@@ -57,7 +57,7 @@ func WithCallback[K comparable, V any](onEvicted func(key K, value V)) Option[K,
 	}
 }
 
-// WithSieve returns a SieveOption that enables sieve
+// WithSieve returns a Option that enables sieve
 func WithSieve[K comparable, V any]() Option[K, V] {
 	return func(c *Cache[K, V]) {
 		c.sieveOpt = true
