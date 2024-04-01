@@ -192,7 +192,19 @@ func (c *LRU[K, V]) Remove(key K) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if ent, ok := c.items[key]; ok {
-		c.removeElement(ent)
+		c.removeElement(ent, true)
+		return true
+	}
+	return false
+}
+
+// RemoveWithoutEvict removes the provided key from the cache without calling
+// the eviction callback.
+func (c *LRU[K, V]) RemoveWithoutEvict(key K) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if ent, ok := c.items[key]; ok {
+		c.removeElement(ent, false)
 		return true
 	}
 	return false
@@ -203,7 +215,7 @@ func (c *LRU[K, V]) RemoveOldest() (key K, value V, ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if ent := c.evictList.Back(); ent != nil {
-		c.removeElement(ent)
+		c.removeElement(ent, true)
 		return ent.Key, ent.Value, true
 	}
 	return
@@ -292,16 +304,16 @@ func (c *LRU[K, V]) Resize(size int) (evicted int) {
 // removeOldest removes the oldest item from the cache. Has to be called with lock!
 func (c *LRU[K, V]) removeOldest() {
 	if ent := c.evictList.Back(); ent != nil {
-		c.removeElement(ent)
+		c.removeElement(ent, true)
 	}
 }
 
 // removeElement is used to remove a given list element from the cache. Has to be called with lock!
-func (c *LRU[K, V]) removeElement(e *internal.Entry[K, V]) {
+func (c *LRU[K, V]) removeElement(e *internal.Entry[K, V], cb bool) {
 	c.evictList.Remove(e)
 	delete(c.items, e.Key)
 	c.removeFromBucket(e)
-	if c.onEvict != nil {
+	if cb && c.onEvict != nil {
 		c.onEvict(e.Key, e.Value)
 	}
 }
@@ -319,7 +331,7 @@ func (c *LRU[K, V]) deleteExpired() {
 		c.mu.Lock()
 	}
 	for _, ent := range c.buckets[bucketIdx].entries {
-		c.removeElement(ent)
+		c.removeElement(ent, true)
 	}
 	c.nextCleanupBucket = (c.nextCleanupBucket + 1) % numBuckets
 	c.mu.Unlock()
