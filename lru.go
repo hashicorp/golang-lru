@@ -93,9 +93,9 @@ func (c *Cache[K, V]) Add(key K, value V) (evicted bool) {
 
 // Get looks up a key's value from the cache.
 func (c *Cache[K, V]) Get(key K) (value V, ok bool) {
-	c.lock.Lock()
+	c.lock.RLock()
 	value, ok = c.lru.Get(key)
-	c.lock.Unlock()
+	c.lock.RUnlock()
 	return value, ok
 }
 
