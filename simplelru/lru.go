@@ -12,12 +12,14 @@ import (
 // EvictCallback is used to get a callback when a cache entry is evicted
 type EvictCallback[K comparable, V any] func(key K, value V)
 
-// LRU implements a non-thread safe fixed size LRU cache
+// LRU implements a non-thread safe fixed cache with LRU and SIEVE eviction (https://cachemon.github.io/SIEVE-website/)
 type LRU[K comparable, V any] struct {
 	size      int
 	evictList *internal.LruList[K, V]
 	items     map[K]*internal.Entry[K, V]
 	onEvict   EvictCallback[K, V]
+	hand      *internal.Entry[K, V]
+	useSieve  bool
 }
 
 // NewLRU constructs an LRU of the given size
@@ -32,6 +34,25 @@ func NewLRU[K comparable, V any](size int, onEvict EvictCallback[K, V]) (*LRU[K,
 		items:     make(map[K]*internal.Entry[K, V]),
 		onEvict:   onEvict,
 	}
+
+	return c, nil
+}
+
+// NewSieve constructs a SIEVE of the given size
+func NewSieve[K comparable, V any](size int, onEvict EvictCallback[K, V]) (*LRU[K, V], error) {
+	if size <= 0 {
+		return nil, errors.New("must provide a positive size")
+	}
+
+	c := &LRU[K, V]{
+		size:      size,
+		evictList: internal.NewList[K, V](),
+		items:     make(map[K]*internal.Entry[K, V]),
+		onEvict:   onEvict,
+		hand:      nil,
+		useSieve:  true,
+	}
+
 	return c, nil
 }
 
@@ -50,9 +71,26 @@ func (c *LRU[K, V]) Purge() {
 func (c *LRU[K, V]) Add(key K, value V) (evicted bool) {
 	// Check for existing item
 	if ent, ok := c.items[key]; ok {
-		c.evictList.MoveToFront(ent)
+		if c.useSieve {
+			ent.Visited = true
+		} else {
+			c.evictList.MoveToFront(ent)
+		}
+
 		ent.Value = value
 		return false
+	}
+
+	if c.useSieve {
+		if c.evictList.Length() >= c.size {
+			c.performSieveEviction()
+			evicted = true
+		}
+
+		ent := c.evictList.PushFront(key, value)
+		ent.Visited = false
+		c.items[key] = ent
+		return
 	}
 
 	// Add new item
@@ -70,7 +108,12 @@ func (c *LRU[K, V]) Add(key K, value V) (evicted bool) {
 // Get looks up a key's value from the cache.
 func (c *LRU[K, V]) Get(key K) (value V, ok bool) {
 	if ent, ok := c.items[key]; ok {
-		c.evictList.MoveToFront(ent)
+		if c.useSieve {
+			ent.Visited = true
+		} else {
+			c.evictList.MoveToFront(ent)
+		}
+
 		return ent.Value, true
 	}
 	return
@@ -93,6 +136,16 @@ func (c *LRU[K, V]) Peek(key K) (value V, ok bool) {
 	return
 }
 
+// visited returns if the key is visited
+func (c *LRU[K, V]) visited(key K) (present bool, visited bool) {
+	var ent *internal.Entry[K, V]
+	if ent, present = c.items[key]; present {
+		visited = ent.Visited
+	}
+
+	return
+}
+
 // Remove removes the provided key from the cache, returning if the
 // key was contained.
 func (c *LRU[K, V]) Remove(key K) (present bool) {
@@ -105,6 +158,10 @@ func (c *LRU[K, V]) Remove(key K) (present bool) {
 
 // RemoveOldest removes the oldest item from the cache.
 func (c *LRU[K, V]) RemoveOldest() (key K, value V, ok bool) {
+	if c.useSieve {
+		return c.performSieveEviction()
+	}
+
 	if ent := c.evictList.Back(); ent != nil {
 		c.removeElement(ent)
 		return ent.Key, ent.Value, true
@@ -114,6 +171,15 @@ func (c *LRU[K, V]) RemoveOldest() (key K, value V, ok bool) {
 
 // GetOldest returns the oldest entry
 func (c *LRU[K, V]) GetOldest() (key K, value V, ok bool) {
+	if c.useSieve {
+		c.getSieveCandidate()
+		if c.hand != nil {
+			return c.hand.Key, c.hand.Value, true
+		}
+
+		return
+	}
+
 	if ent := c.evictList.Back(); ent != nil {
 		return ent.Key, ent.Value, true
 	}
@@ -159,14 +225,56 @@ func (c *LRU[K, V]) Resize(size int) (evicted int) {
 		diff = 0
 	}
 	for i := 0; i < diff; i++ {
-		c.removeOldest()
+		if c.useSieve {
+			c.performSieveEviction()
+		} else {
+			c.removeOldest()
+		}
 	}
+
 	c.size = size
 	return diff
 }
 
+// performSieveEviction - runs a eviction by running Sieve Algorithm and returns the evicted value.
+func (c *LRU[K, V]) performSieveEviction() (key K, value V, ok bool) {
+	c.getSieveCandidate()
+	if c.hand != nil {
+		candidate := c.hand
+		c.hand = c.hand.PrevEntry()
+		c.removeElement(candidate)
+		return candidate.Key, candidate.Value, true
+	}
+
+	return
+}
+
+// getSieveCandidate evicts an entry based on sieve algorithm.
+func (c *LRU[K, V]) getSieveCandidate() {
+	if c.Len() == 0 {
+		return
+	}
+
+	if c.hand == nil {
+		c.hand = c.evictList.Back()
+	}
+
+	for c.hand != nil && c.hand.Visited {
+		c.hand.Visited = false
+		c.hand = c.hand.PrevEntry()
+		if c.hand == nil {
+			c.hand = c.evictList.Back()
+		}
+	}
+}
+
 // removeOldest removes the oldest item from the cache.
 func (c *LRU[K, V]) removeOldest() {
+	if c.useSieve {
+		c.performSieveEviction()
+		return
+	}
+
 	if ent := c.evictList.Back(); ent != nil {
 		c.removeElement(ent)
 	}

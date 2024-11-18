@@ -29,6 +29,9 @@ type Entry[K comparable, V any] struct {
 
 	// The expiry bucket item was put in, optional
 	ExpireBucket uint8
+
+	// Visited to keep track if an entry has been recently accessed, used for sieve-eviction
+	Visited bool
 }
 
 // PrevEntry returns the previous list element or nil.
