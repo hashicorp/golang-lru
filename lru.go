@@ -21,6 +21,7 @@ type Cache[K comparable, V any] struct {
 	evictedVals []V
 	onEvictedCB func(k K, v V)
 	lock        sync.RWMutex
+	sieveOpt    bool
 }
 
 // New creates an LRU of the given size.
@@ -35,12 +36,54 @@ func NewWithEvict[K comparable, V any](size int, onEvicted func(key K, value V))
 	c = &Cache[K, V]{
 		onEvictedCB: onEvicted,
 	}
+
 	if onEvicted != nil {
 		c.initEvictBuffers()
 		onEvicted = c.onEvicted
 	}
+
 	c.lru, err = simplelru.NewLRU(size, onEvicted)
 	return
+}
+
+// WithCallback returns a Option with eviction callback.
+func WithCallback[K comparable, V any](onEvicted func(key K, value V)) Option[K, V] {
+	return func(c *Cache[K, V]) {
+		c.onEvictedCB = onEvicted
+
+		if onEvicted != nil {
+			c.initEvictBuffers()
+		}
+	}
+}
+
+// WithSieve returns a Option that enables sieve
+func WithSieve[K comparable, V any]() Option[K, V] {
+	return func(c *Cache[K, V]) {
+		c.sieveOpt = true
+	}
+}
+
+// Option is used to set options for the cache.
+type Option[K comparable, V any] func(*Cache[K, V])
+
+// NewWithOpts helps create a LRU cache with option with options.
+func NewWithOpts[K comparable, V any](size int, opts ...Option[K, V]) (c *Cache[K, V], err error) {
+	// create a cache with default settings
+	c = &Cache[K, V]{
+		onEvictedCB: nil,
+	}
+
+	for _, opt := range opts {
+		opt(c)
+	}
+
+	if c.sieveOpt {
+		c.lru, err = simplelru.NewSieve(size, c.onEvicted)
+	} else {
+		c.lru, err = simplelru.NewLRU(size, c.onEvicted)
+	}
+	return c, err
 }
 
 func (c *Cache[K, V]) initEvictBuffers() {
