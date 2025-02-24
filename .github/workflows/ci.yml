@@ -23,7 +23,7 @@ jobs:
 
       - name: build, test and generate coverage report
         run: |
-          go test -timeout=60s -race -v ./... -coverprofie=coverage.out
+          go test -timeout=60s -race -v ./... -coverprofile=coverage.out
           go build -race ./...
 
       - name: build and test ARC
