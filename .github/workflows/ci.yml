@@ -2,9 +2,10 @@ name: build
 
 on:
   push:
-    branches:
-    tags:
+    branches: [main]
+    tags: ["*"]
   pull_request:
+    branches: [main]
 
 jobs:
   build:
@@ -20,9 +21,9 @@ jobs:
       - name: checkout
         uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0
 
-      - name: build and test
+      - name: build, test and generate coverage report
         run: |
-          go test -timeout=60s -race ./...
+          go test -timeout=60s -race -v ./... -coverprofile=coverage.out
           go build -race ./...
 
       - name: build and test ARC
@@ -30,6 +31,15 @@ jobs:
         run: |
           go test -timeout=60s -race
           go build -race
+
+      - name: Upload the coverage report
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
+        with:
+         path: coverage.out
+         name: Coverage-report
+
+      - name: Display the coverage report
+        run: go tool cover -func=coverage.out
 
       - name: install golangci-lint
         run: curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b $GITHUB_WORKSPACE v1.53.3
