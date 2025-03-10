@@ -94,6 +94,16 @@ func (l *LruList[K, V]) insertValue(k K, v V, expiresAt time.Time, at *Entry[K, 
 
 // Remove removes e from its list, decrements l.len
 func (l *LruList[K, V]) Remove(e *Entry[K, V]) V {
+	// Check if the entry is nil or already removed
+	if e == nil || e.prev == nil || e.next == nil || e.list == nil {
+		var zero V
+		return zero
+	}
+
+	// Check if the entry belongs to this list
+	if e.list != l {
+		return e.Value
+	}
 	e.prev.next = e.next
 	e.next.prev = e.prev
 	e.next = nil // avoid memory leaks

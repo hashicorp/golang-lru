@@ -6,7 +6,7 @@ package simplelru
 import (
 	"errors"
 
-	"github.com/hashicorp/golang-lru/v2/internal"
+	"github.com/ypapax/golang-lru/v2/internal"
 )
 
 // EvictCallback is used to get a callback when a cache entry is evicted

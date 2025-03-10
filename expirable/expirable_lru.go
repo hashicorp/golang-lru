@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hashicorp/golang-lru/v2/internal"
+	"github.com/ypapax/golang-lru/v2/internal"
 )
 
 // EvictCallback is used to get a callback when a cache entry is evicted
@@ -298,6 +298,12 @@ func (c *LRU[K, V]) removeOldest() {
 
 // removeElement is used to remove a given list element from the cache. Has to be called with lock!
 func (c *LRU[K, V]) removeElement(e *internal.Entry[K, V]) {
+	if e == nil {
+		return
+	}
+	if c.evictList == nil {
+		return
+	}
 	c.evictList.Remove(e)
 	delete(c.items, e.Key)
 	c.removeFromBucket(e)
@@ -309,6 +315,9 @@ func (c *LRU[K, V]) removeElement(e *internal.Entry[K, V]) {
 // deleteExpired deletes expired records from the oldest bucket, waiting for the newest entry
 // in it to expire first.
 func (c *LRU[K, V]) deleteExpired() {
+	if c.evictList == nil {
+		return
+	}
 	c.mu.Lock()
 	bucketIdx := c.nextCleanupBucket
 	timeToExpire := time.Until(c.buckets[bucketIdx].newestEntry)
