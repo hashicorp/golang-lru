@@ -74,6 +74,6 @@ func main() {
 	// Output:
 	// value before expiration is found: true, value: "val1"
 	// value after expiration is found: false, value: ""
-	// Cache len: 1
+	// Cache len: 2
 }
 ```
