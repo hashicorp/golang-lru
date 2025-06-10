@@ -6,10 +6,10 @@ linters:
   disable-all: true
   enable:
     - revive
-    - staticcheck
+    - megacheck
     - govet
     - unconvert
-    - gosec
+    - gas
     - gocyclo
     - dupl
     - misspell
@@ -18,6 +18,7 @@ linters:
     - typecheck
     - ineffassign
     # - stylecheck
+    - exportloopref
     - gocritic
     - nakedret
     - gosimple

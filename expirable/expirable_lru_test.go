@@ -300,6 +300,7 @@ func TestLRUWithPurgeEnforcedBySize(t *testing.T) {
 	lc := NewLRU[string, string](10, nil, time.Hour)
 
 	for i := 0; i < 100; i++ {
+		i := i
 		lc.Add(fmt.Sprintf("key%d", i), fmt.Sprintf("val%d", i))
 		v, ok := lc.Get(fmt.Sprintf("key%d", i))
 		if v != fmt.Sprintf("val%d", i) {

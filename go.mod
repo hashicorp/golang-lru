@@ -1,3 +1,3 @@
 module github.com/hashicorp/golang-lru/v2
 
-go 1.23
+go 1.19
