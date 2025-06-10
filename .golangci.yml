@@ -18,7 +18,6 @@ linters:
     - typecheck
     - ineffassign
     # - stylecheck
-    - copyloopvar
     - gocritic
     - nakedret
     - gosimple
