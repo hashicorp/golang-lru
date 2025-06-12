@@ -97,7 +97,15 @@ func (c *LRU[K, V]) Peek(key K) (value V, ok bool) {
 // key was contained.
 func (c *LRU[K, V]) Remove(key K) (present bool) {
 	if ent, ok := c.items[key]; ok {
-		c.removeElement(ent)
+		c.removeElement(ent, true)
+		return true
+	}
+	return false
+}
+
+func (c *LRU[K, V]) RemoveWithoutEvict(key K) (present bool) {
+	if ent, ok := c.items[key]; ok {
+		c.removeElement(ent, false)
 		return true
 	}
 	return false
@@ -106,7 +114,7 @@ func (c *LRU[K, V]) Remove(key K) (present bool) {
 // RemoveOldest removes the oldest item from the cache.
 func (c *LRU[K, V]) RemoveOldest() (key K, value V, ok bool) {
 	if ent := c.evictList.Back(); ent != nil {
-		c.removeElement(ent)
+		c.removeElement(ent, true)
 		return ent.Key, ent.Value, true
 	}
 	return
@@ -168,15 +176,15 @@ func (c *LRU[K, V]) Resize(size int) (evicted int) {
 // removeOldest removes the oldest item from the cache.
 func (c *LRU[K, V]) removeOldest() {
 	if ent := c.evictList.Back(); ent != nil {
-		c.removeElement(ent)
+		c.removeElement(ent, true)
 	}
 }
 
 // removeElement is used to remove a given list element from the cache
-func (c *LRU[K, V]) removeElement(e *internal.Entry[K, V]) {
+func (c *LRU[K, V]) removeElement(e *internal.Entry[K, V], cb bool) {
 	c.evictList.Remove(e)
 	delete(c.items, e.Key)
-	if c.onEvict != nil {
+	if cb && c.onEvict != nil {
 		c.onEvict(e.Key, e.Value)
 	}
 }
