@@ -23,6 +23,9 @@ type LRUCache[K comparable, V any] interface {
 	// Removes a key from the cache.
 	Remove(key K) bool
 
+	// Removes a key from the cache without calling the eviction callback.
+	RemoveWithoutEvict(key K) bool
+
 	// Removes the oldest entry from cache.
 	RemoveOldest() (K, V, bool)
 
