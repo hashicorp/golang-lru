@@ -251,6 +251,16 @@ func (c *LRU[K, V]) Values() []V {
 	return values
 }
 
+// Range calls a function on key/value pairs in the cache, from oldest to newest,
+// until the provided callback returns true. Expired entries are filtered out.
+func (c *LRU[K, V]) Range(callback func(key K, value V) (done bool)) {
+	for _, ent := range c.entries() {
+		if callback(ent.Key, ent.Value) {
+			return
+		}
+	}
+}
+
 // Len returns the number of items in the cache.
 func (c *LRU[K, V]) Len() int {
 	c.mu.Lock()
@@ -338,6 +348,22 @@ func (c *LRU[K, V]) addToBucket(e *internal.Entry[K, V]) {
 // removeFromBucket removes the entry from its corresponding bucket. Has to be called with lock!
 func (c *LRU[K, V]) removeFromBucket(e *internal.Entry[K, V]) {
 	delete(c.buckets[e.ExpireBucket].entries, e.Key)
+}
+
+// entries returns a slice of the current internal entries in the cache
+func (c *LRU[K, V]) entries() []*internal.Entry[K, V] {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	entries := make([]*internal.Entry[K, V], 0, len(c.items))
+	now := time.Now()
+	for ent := c.evictList.Back(); ent != nil; ent = ent.PrevEntry() {
+		if now.After(ent.ExpiresAt) {
+			continue
+		}
+		entries = append(entries, ent)
+	}
+	return entries
 }
 
 // Cap returns the capacity of the cache
