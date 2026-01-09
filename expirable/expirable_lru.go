@@ -297,13 +297,28 @@ func (c *LRU[K, V]) removeElement(e *internal.Entry[K, V]) {
 // in it to expire first.
 func (c *LRU[K, V]) deleteExpired() {
 	c.mu.Lock()
+
+	// grab done channel to detect Closes
+	done := c.done
+
 	bucketIdx := c.nextCleanupBucket
 	timeToExpire := time.Until(c.buckets[bucketIdx].newestEntry)
 	// wait for newest entry to expire before cleanup without holding lock
 	if timeToExpire > 0 {
 		c.mu.Unlock()
-		time.Sleep(timeToExpire)
+		select {
+		case <-time.After(timeToExpire):
+		case <-done:
+			return
+		}
 		c.mu.Lock()
+
+		select {
+		case <-done:
+			// Done channel closed while sleeping, return without deleting entries
+			return
+		default:
+		}
 	}
 	for _, ent := range c.buckets[bucketIdx].entries {
 		c.removeElement(ent)
