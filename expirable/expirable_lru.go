@@ -316,6 +316,7 @@ func (c *LRU[K, V]) deleteExpired() {
 		select {
 		case <-done:
 			// Done channel closed while sleeping, return without deleting entries
+			c.mu.Unlock()
 			return
 		default:
 		}
