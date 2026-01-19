@@ -575,3 +575,50 @@ func TestCache_EvictionSameKey(t *testing.T) {
 		t.Errorf("evictedKeys got: %v want: %v", evictedKeys, want)
 	}
 }
+
+func TestCache_CloseGoRoutine(t *testing.T) {
+	cache := NewLRU[string, string](2, nil, time.Millisecond*10)
+
+	cache.Add("key1", "val1")
+	cache.Close()
+
+	time.Sleep(time.Millisecond * 50)
+	_, ok := cache.Get("key1")
+	if !ok {
+		t.Errorf("expected key 1 to be present")
+	}
+
+	values := cache.Values()
+	if len(values) != 1 || values[0] != "val1" {
+		t.Errorf("expected values to contain val1")
+	}
+
+	keys := cache.Keys()
+	if len(keys) != 1 || keys[0] != "key1" {
+		t.Errorf("expected keys to contain key1")
+	}
+}
+
+func TestCache_RestartGoRoutine(t *testing.T) {
+	cache := NewLRU[string, string](2, nil, time.Millisecond*10)
+
+	cache.Add("key1", "val1")
+	cache.Close()
+	cache.Restart()
+
+	time.Sleep(time.Millisecond * 50)
+	_, ok := cache.Get("key1")
+	if ok {
+		t.Errorf("expected key 1 to be expired")
+	}
+
+	value := cache.Values()
+	if len(value) != 0 {
+		t.Errorf("expected values to be empty")
+	}
+
+	keys := cache.Keys()
+	if len(keys) != 0 {
+		t.Errorf("expected keys to be empty")
+	}
+}
