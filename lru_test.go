@@ -444,3 +444,35 @@ func TestCache_EvictionSameKey(t *testing.T) {
 		}
 	})
 }
+
+func TestLRURemoveWithoutEvict(t *testing.T) {
+	var (
+		called      bool
+		evictedKeys []int
+	)
+
+	cache, _ := NewWithEvict(2, func(key int, _ struct{}) {
+		called = true
+		evictedKeys = append(evictedKeys, key)
+	})
+
+	cache.Add(1, struct{}{})
+	cache.Add(2, struct{}{})
+
+	cache.Remove(1)
+	if !called {
+		t.Error("eviction wasn't called")
+	}
+
+	called = false
+
+	cache.RemoveWithoutEvict(2)
+	if called {
+		t.Error("eviction was called")
+	}
+
+	want := []int{1}
+	if !reflect.DeepEqual(evictedKeys, want) {
+		t.Errorf("evictedKeys got: %v want: %v", evictedKeys, want)
+	}
+}
