@@ -117,6 +117,30 @@ func (c *Cache[K, V]) Peek(key K) (value V, ok bool) {
 	return value, ok
 }
 
+// GetOrAdd checks if a key is in the cache while
+// updating the recent-ness, and if not, adds the value.
+// Returns the value if found, whether found, and whether an eviction occurred.
+func (c *Cache[K, V]) GetOrAdd(key K, value V) (previous V, ok, evicted bool) {
+	var k K
+	var v V
+	c.lock.Lock()
+	previous, ok = c.lru.Get(key)
+	if ok {
+		c.lock.Unlock()
+		return previous, true, false
+	}
+	evicted = c.lru.Add(key, value)
+	if c.onEvictedCB != nil && evicted {
+		k, v = c.evictedKeys[0], c.evictedVals[0]
+		c.evictedKeys, c.evictedVals = c.evictedKeys[:0], c.evictedVals[:0]
+	}
+	c.lock.Unlock()
+	if c.onEvictedCB != nil && evicted {
+		c.onEvictedCB(k, v)
+	}
+	return
+}
+
 // ContainsOrAdd checks if a key is in the cache without updating the
 // recent-ness or deleting it for being stale, and if not, adds the value.
 // Returns whether found and whether an eviction occurred.
