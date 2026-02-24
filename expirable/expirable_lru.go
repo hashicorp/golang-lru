@@ -29,6 +29,8 @@ type LRU[K comparable, V any] struct {
 	buckets []bucket[K, V]
 	// uint8 because it's number between 0 and numBuckets
 	nextCleanupBucket uint8
+
+	cleanupStopped bool
 }
 
 // bucket is a container for holding entries to be expired
@@ -60,12 +62,13 @@ func NewLRU[K comparable, V any](size int, onEvict EvictCallback[K, V], ttl time
 	}
 
 	res := LRU[K, V]{
-		ttl:       ttl,
-		size:      size,
-		evictList: internal.NewList[K, V](),
-		items:     make(map[K]*internal.Entry[K, V]),
-		onEvict:   onEvict,
-		done:      make(chan struct{}),
+		ttl:            ttl,
+		size:           size,
+		evictList:      internal.NewList[K, V](),
+		items:          make(map[K]*internal.Entry[K, V]),
+		onEvict:        onEvict,
+		done:           make(chan struct{}),
+		cleanupStopped: false,
 	}
 
 	// initialize the buckets
@@ -74,24 +77,7 @@ func NewLRU[K comparable, V any](size int, onEvict EvictCallback[K, V], ttl time
 		res.buckets[i] = bucket[K, V]{entries: make(map[K]*internal.Entry[K, V])}
 	}
 
-	// enable deleteExpired() running in separate goroutine for cache with non-zero TTL
-	//
-	// Important: done channel is never closed, so deleteExpired() goroutine will never exit,
-	// it's decided to add functionality to close it in the version later than v2.
-	if res.ttl != noEvictionTTL {
-		go func(done <-chan struct{}) {
-			ticker := time.NewTicker(res.ttl / numBuckets)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-done:
-					return
-				case <-ticker.C:
-					res.deleteExpired()
-				}
-			}
-		}(res.done)
-	}
+	res.startGoroutine()
 	return &res
 }
 
@@ -152,7 +138,7 @@ func (c *LRU[K, V]) Get(key K) (value V, ok bool) {
 	var ent *internal.Entry[K, V]
 	if ent, ok = c.items[key]; ok {
 		// Expired item check
-		if time.Now().After(ent.ExpiresAt) {
+		if !c.cleanupStopped && time.Now().After(ent.ExpiresAt) {
 			return value, false
 		}
 		c.evictList.MoveToFront(ent)
@@ -178,7 +164,7 @@ func (c *LRU[K, V]) Peek(key K) (value V, ok bool) {
 	var ent *internal.Entry[K, V]
 	if ent, ok = c.items[key]; ok {
 		// Expired item check
-		if time.Now().After(ent.ExpiresAt) {
+		if !c.cleanupStopped && time.Now().After(ent.ExpiresAt) {
 			return value, false
 		}
 		return ent.Value, true
@@ -227,7 +213,7 @@ func (c *LRU[K, V]) Keys() []K {
 	keys := make([]K, 0, len(c.items))
 	now := time.Now()
 	for ent := c.evictList.Back(); ent != nil; ent = ent.PrevEntry() {
-		if now.After(ent.ExpiresAt) {
+		if !c.cleanupStopped && now.After(ent.ExpiresAt) {
 			continue
 		}
 		keys = append(keys, ent.Key)
@@ -243,7 +229,7 @@ func (c *LRU[K, V]) Values() []V {
 	values := make([]V, 0, len(c.items))
 	now := time.Now()
 	for ent := c.evictList.Back(); ent != nil; ent = ent.PrevEntry() {
-		if now.After(ent.ExpiresAt) {
+		if !c.cleanupStopped && now.After(ent.ExpiresAt) {
 			continue
 		}
 		values = append(values, ent.Value)
@@ -278,16 +264,17 @@ func (c *LRU[K, V]) Resize(size int) (evicted int) {
 }
 
 // Close destroys cleanup goroutine. To clean up the cache, run Purge() before Close().
-// func (c *LRU[K, V]) Close() {
-//	c.mu.Lock()
-//	defer c.mu.Unlock()
-//	select {
-//	case <-c.done:
-//		return
-//	default:
-//	}
-//	close(c.done)
-// }
+func (c *LRU[K, V]) Close() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	select {
+	case <-c.done:
+		return
+	default:
+	}
+	close(c.done)
+	c.cleanupStopped = true
+}
 
 // removeOldest removes the oldest item from the cache. Has to be called with lock!
 func (c *LRU[K, V]) removeOldest() {
@@ -310,13 +297,29 @@ func (c *LRU[K, V]) removeElement(e *internal.Entry[K, V]) {
 // in it to expire first.
 func (c *LRU[K, V]) deleteExpired() {
 	c.mu.Lock()
+
+	// grab done channel to detect Closes
+	done := c.done
+
 	bucketIdx := c.nextCleanupBucket
 	timeToExpire := time.Until(c.buckets[bucketIdx].newestEntry)
 	// wait for newest entry to expire before cleanup without holding lock
 	if timeToExpire > 0 {
 		c.mu.Unlock()
-		time.Sleep(timeToExpire)
+		select {
+		case <-time.After(timeToExpire):
+		case <-done:
+			return
+		}
 		c.mu.Lock()
+
+		select {
+		case <-done:
+			// Done channel closed while sleeping, return without deleting entries
+			c.mu.Unlock()
+			return
+		default:
+		}
 	}
 	for _, ent := range c.buckets[bucketIdx].entries {
 		c.removeElement(ent)
@@ -343,4 +346,41 @@ func (c *LRU[K, V]) removeFromBucket(e *internal.Entry[K, V]) {
 // Cap returns the capacity of the cache
 func (c *LRU[K, V]) Cap() int {
 	return c.size
+}
+
+// Restart recreates the cleanup goroutine after Close() has been called.
+func (c *LRU[K, V]) Restart() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Check if the goroutine is already running
+	select {
+	case <-c.done:
+		// Channel is closed, need to recreate it
+		c.done = make(chan struct{})
+		c.cleanupStopped = false
+		c.startGoroutine()
+	default:
+		// Goroutine is already running, nothing to do
+	}
+}
+
+// startGoroutine starts the cleanup goroutine for expired entries.
+func (c *LRU[K, V]) startGoroutine() {
+	if c.ttl == noEvictionTTL {
+		return
+	}
+
+	go func(done <-chan struct{}) {
+		ticker := time.NewTicker(c.ttl / numBuckets)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				c.deleteExpired()
+			}
+		}
+	}(c.done)
 }
