@@ -622,3 +622,61 @@ func TestCache_RestartGoRoutine(t *testing.T) {
 		t.Errorf("expected keys to be empty")
 	}
 }
+
+func TestLRU_GetAndRefresh_RenewsTTL(t *testing.T) {
+	cache := NewLRU[string, string](2, nil, 80*time.Millisecond)
+
+	cache.Add("key1", "val1")
+
+	time.Sleep(50 * time.Millisecond)
+	v, ok := cache.GetAndRefresh("key1")
+	if !ok || v != "val1" {
+		t.Fatalf("expected refreshed key1 hit, got value=%q ok=%v", v, ok)
+	}
+
+	time.Sleep(40 * time.Millisecond)
+	v, ok = cache.Get("key1")
+	if !ok || v != "val1" {
+		t.Fatalf("expected key1 to still be valid after refresh, got value=%q ok=%v", v, ok)
+	}
+}
+
+func TestLRU_GetAndRefresh_ExpiredDoesNotRevive(t *testing.T) {
+	cache := NewLRU[string, string](2, nil, 20*time.Millisecond)
+
+	cache.Add("key1", "val1")
+	time.Sleep(40 * time.Millisecond)
+
+	v, ok := cache.GetAndRefresh("key1")
+	if ok || v != "" {
+		t.Fatalf("expected expired key1 miss, got value=%q ok=%v", v, ok)
+	}
+
+	deadline := time.Now().Add(300 * time.Millisecond)
+	for cache.Len() != 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if cache.Len() != 0 {
+		t.Fatalf("expected reaper to eventually remove expired key, got len=%d", cache.Len())
+	}
+}
+
+func TestLRU_GetAndRefresh_UpdatesRecency(t *testing.T) {
+	cache := NewLRU[string, string](2, nil, time.Hour)
+
+	cache.Add("key1", "val1")
+	cache.Add("key2", "val2")
+
+	v, ok := cache.GetAndRefresh("key1")
+	if !ok || v != "val1" {
+		t.Fatalf("expected refreshed key1 hit, got value=%q ok=%v", v, ok)
+	}
+
+	cache.Add("key3", "val3")
+	if cache.Contains("key2") {
+		t.Fatalf("expected key2 to be evicted as oldest")
+	}
+	if !cache.Contains("key1") || !cache.Contains("key3") {
+		t.Fatalf("expected key1 and key3 to remain in cache")
+	}
+}

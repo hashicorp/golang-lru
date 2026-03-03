@@ -147,6 +147,29 @@ func (c *LRU[K, V]) Get(key K) (value V, ok bool) {
 	return
 }
 
+// GetAndRefresh looks up a key's value from the cache, updates the
+// "recently used"-ness of the key, and renews its expiration.
+func (c *LRU[K, V]) GetAndRefresh(key K) (value V, ok bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	ent, ok := c.items[key]
+	if !ok {
+		return value, false
+	}
+
+	now := time.Now()
+	if !c.cleanupStopped && now.After(ent.ExpiresAt) {
+		return value, false
+	}
+
+	c.evictList.MoveToFront(ent)
+	c.removeFromBucket(ent)
+	ent.ExpiresAt = now.Add(c.ttl)
+	c.addToBucket(ent)
+	return ent.Value, true
+}
+
 // Contains checks if a key is in the cache, without updating the recent-ness
 // or deleting it for being stale.
 func (c *LRU[K, V]) Contains(key K) (ok bool) {
