@@ -133,7 +133,7 @@ func (c *LRU[K, V]) Keys() []K {
 
 // Values returns a slice of the values in the cache, from oldest to newest.
 func (c *LRU[K, V]) Values() []V {
-	values := make([]V, len(c.items))
+	values := make([]V, len(c.evictList.Length()))
 	i := 0
 	for ent := c.evictList.Back(); ent != nil; ent = ent.PrevEntry() {
 		values[i] = ent.Value
