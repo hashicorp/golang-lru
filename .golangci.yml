@@ -1,46 +1,51 @@
-# Copyright IBM Corp. 2014, 2025
+# Copyright IBM Corp. 2014, 2026
 # SPDX-License-Identifier: MPL-2.0
 
+version: "2"
 linters:
-  fast: false
-  disable-all: true
+  default: none
   enable:
-    - revive
-    - megacheck
-    - govet
-    - unconvert
-    - gas
-    - gocyclo
     - dupl
+    - gocritic
+    - gocyclo
+    - gosec
+    - govet
+    - ineffassign
     - misspell
+    - nakedret
+    - prealloc
+    - revive
+    - staticcheck
+    - unconvert
     - unparam
     - unused
-    - typecheck
-    - ineffassign
-    # - stylecheck
-    - exportloopref
-    - gocritic
-    - nakedret
-    - gosimple
-    - prealloc
-
-# golangci-lint configuration file
-linters-settings:
-  revive:
-    ignore-generated-header: true
-    severity: warning
+  settings:
+    revive:
+      severity: warning
+      rules:
+        - name: package-comments
+          severity: warning
+          disabled: true
+        - name: exported
+          arguments:
+            - checkPrivateReceivers
+            - disableStutteringCheck
+          severity: warning
+          disabled: false
+  exclusions:
+    generated: lax
     rules:
-      - name: package-comments
-        severity: warning
-        disabled: true
-      - name: exported
-        severity: warning
-        disabled: false
-        arguments: ["checkPrivateReceivers", "disableStutteringCheck"]
-
-issues:
-  exclude-use-default: false
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - dupl
+      - linters:
+          - dupl
+        path: _test\.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

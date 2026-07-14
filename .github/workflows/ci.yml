@@ -5,28 +5,31 @@ on:
     branches: [main]
     tags: ["*"]
   pull_request:
-    branches: [main]
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version:
+          - "oldstable"
+          - "stable"
 
     steps:
-      - name: set up go 1.19
+      - name: Setup Go
         uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
-          go-version: 1.19
-        id: go
+          go-version: ${{ matrix.go-version }}
 
-      - name: checkout
+      - name: Checkout Code
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
-      - name: build, test and generate coverage report
+      - name: Build, test and generate coverage report
         run: |
           go test -timeout=60s -race -v ./... -coverprofile=coverage.out
           go build -race ./...
 
-      - name: build and test ARC
+      - name: Build and test ARC
         working-directory: ./arc
         run: |
           go test -timeout=60s -race
@@ -41,12 +44,10 @@ jobs:
       - name: Display the coverage report
         run: go tool cover -func=coverage.out
 
-      - name: install golangci-lint
-        run: curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b $GITHUB_WORKSPACE v1.53.3
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
 
-      - name: run golangci-lint
-        run: $GITHUB_WORKSPACE/golangci-lint run --out-format=github-actions ./... ./simplelru/... ./expirable/...
-
-      - name: run golangci-lint on ARC
-        working-directory: ./arc
-        run: $GITHUB_WORKSPACE/golangci-lint run --out-format=github-actions ./...
+      - name: Run golangci-lint on ARC
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          working-directory: ./arc
