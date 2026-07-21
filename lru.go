@@ -55,39 +55,54 @@ func (c *Cache[K, V]) onEvicted(k K, v V) {
 	c.evictedVals = append(c.evictedVals, v)
 }
 
+// takeEvictions returns and clears any buffered eviction entries.
+// Caller must hold c.lock.
+func (c *Cache[K, V]) takeEvictions() (ks []K, vs []V) {
+	if len(c.evictedKeys) == 0 {
+		return nil, nil
+	}
+	ks, vs = c.evictedKeys, c.evictedVals
+	c.initEvictBuffers()
+	return ks, vs
+}
+
+// invokeEvictions runs the user eviction callback outside the lock.
+func (c *Cache[K, V]) invokeEvictions(ks []K, vs []V) {
+	if c.onEvictedCB == nil {
+		return
+	}
+	for i := 0; i < len(ks); i++ {
+		c.onEvictedCB(ks[i], vs[i])
+	}
+}
+
 // Purge is used to completely clear the cache.
 func (c *Cache[K, V]) Purge() {
 	var ks []K
 	var vs []V
 	c.lock.Lock()
 	c.lru.Purge()
-	if c.onEvictedCB != nil && len(c.evictedKeys) > 0 {
-		ks, vs = c.evictedKeys, c.evictedVals
-		c.initEvictBuffers()
+	if c.onEvictedCB != nil {
+		ks, vs = c.takeEvictions()
 	}
 	c.lock.Unlock()
 	// invoke callback outside of critical section
-	if c.onEvictedCB != nil {
-		for i := 0; i < len(ks); i++ {
-			c.onEvictedCB(ks[i], vs[i])
-		}
-	}
+	c.invokeEvictions(ks, vs)
 }
 
 // Add adds a value to the cache. Returns true if an eviction occurred.
 func (c *Cache[K, V]) Add(key K, value V) (evicted bool) {
-	var k K
-	var v V
+	var ks []K
+	var vs []V
 	c.lock.Lock()
 	evicted = c.lru.Add(key, value)
-	if c.onEvictedCB != nil && evicted {
-		k, v = c.evictedKeys[0], c.evictedVals[0]
-		c.evictedKeys, c.evictedVals = c.evictedKeys[:0], c.evictedVals[:0]
+	if c.onEvictedCB != nil {
+		// Drain the full eviction queue. Do not reset the whole buffer after
+		// only consuming the first entry (see #190).
+		ks, vs = c.takeEvictions()
 	}
 	c.lock.Unlock()
-	if c.onEvictedCB != nil && evicted {
-		c.onEvictedCB(k, v)
-	}
+	c.invokeEvictions(ks, vs)
 	return
 }
 
@@ -121,22 +136,19 @@ func (c *Cache[K, V]) Peek(key K) (value V, ok bool) {
 // recent-ness or deleting it for being stale, and if not, adds the value.
 // Returns whether found and whether an eviction occurred.
 func (c *Cache[K, V]) ContainsOrAdd(key K, value V) (ok, evicted bool) {
-	var k K
-	var v V
+	var ks []K
+	var vs []V
 	c.lock.Lock()
 	if c.lru.Contains(key) {
 		c.lock.Unlock()
 		return true, false
 	}
 	evicted = c.lru.Add(key, value)
-	if c.onEvictedCB != nil && evicted {
-		k, v = c.evictedKeys[0], c.evictedVals[0]
-		c.evictedKeys, c.evictedVals = c.evictedKeys[:0], c.evictedVals[:0]
+	if c.onEvictedCB != nil {
+		ks, vs = c.takeEvictions()
 	}
 	c.lock.Unlock()
-	if c.onEvictedCB != nil && evicted {
-		c.onEvictedCB(k, v)
-	}
+	c.invokeEvictions(ks, vs)
 	return false, evicted
 }
 
@@ -144,8 +156,8 @@ func (c *Cache[K, V]) ContainsOrAdd(key K, value V) (ok, evicted bool) {
 // recent-ness or deleting it for being stale, and if not, adds the value.
 // Returns whether found and whether an eviction occurred.
 func (c *Cache[K, V]) PeekOrAdd(key K, value V) (previous V, ok, evicted bool) {
-	var k K
-	var v V
+	var ks []K
+	var vs []V
 	c.lock.Lock()
 	previous, ok = c.lru.Peek(key)
 	if ok {
@@ -153,31 +165,25 @@ func (c *Cache[K, V]) PeekOrAdd(key K, value V) (previous V, ok, evicted bool) {
 		return previous, true, false
 	}
 	evicted = c.lru.Add(key, value)
-	if c.onEvictedCB != nil && evicted {
-		k, v = c.evictedKeys[0], c.evictedVals[0]
-		c.evictedKeys, c.evictedVals = c.evictedKeys[:0], c.evictedVals[:0]
+	if c.onEvictedCB != nil {
+		ks, vs = c.takeEvictions()
 	}
 	c.lock.Unlock()
-	if c.onEvictedCB != nil && evicted {
-		c.onEvictedCB(k, v)
-	}
+	c.invokeEvictions(ks, vs)
 	return
 }
 
 // Remove removes the provided key from the cache.
 func (c *Cache[K, V]) Remove(key K) (present bool) {
-	var k K
-	var v V
+	var ks []K
+	var vs []V
 	c.lock.Lock()
 	present = c.lru.Remove(key)
-	if c.onEvictedCB != nil && present {
-		k, v = c.evictedKeys[0], c.evictedVals[0]
-		c.evictedKeys, c.evictedVals = c.evictedKeys[:0], c.evictedVals[:0]
+	if c.onEvictedCB != nil {
+		ks, vs = c.takeEvictions()
 	}
 	c.lock.Unlock()
-	if c.onEvictedCB != nil && present {
-		c.onEvictedCB(k, v)
-	}
+	c.invokeEvictions(ks, vs)
 	return
 }
 
@@ -188,32 +194,24 @@ func (c *Cache[K, V]) Resize(size int) (evicted int) {
 	c.lock.Lock()
 	evicted = c.lru.Resize(size)
 	if c.onEvictedCB != nil && evicted > 0 {
-		ks, vs = c.evictedKeys, c.evictedVals
-		c.initEvictBuffers()
+		ks, vs = c.takeEvictions()
 	}
 	c.lock.Unlock()
-	if c.onEvictedCB != nil && evicted > 0 {
-		for i := 0; i < len(ks); i++ {
-			c.onEvictedCB(ks[i], vs[i])
-		}
-	}
+	c.invokeEvictions(ks, vs)
 	return evicted
 }
 
 // RemoveOldest removes the oldest item from the cache.
 func (c *Cache[K, V]) RemoveOldest() (key K, value V, ok bool) {
-	var k K
-	var v V
+	var ks []K
+	var vs []V
 	c.lock.Lock()
 	key, value, ok = c.lru.RemoveOldest()
-	if c.onEvictedCB != nil && ok {
-		k, v = c.evictedKeys[0], c.evictedVals[0]
-		c.evictedKeys, c.evictedVals = c.evictedKeys[:0], c.evictedVals[:0]
+	if c.onEvictedCB != nil {
+		ks, vs = c.takeEvictions()
 	}
 	c.lock.Unlock()
-	if c.onEvictedCB != nil && ok {
-		c.onEvictedCB(k, v)
-	}
+	c.invokeEvictions(ks, vs)
 	return
 }
 

@@ -4,6 +4,7 @@
 package lru
 
 import (
+	"sync"
 	"reflect"
 	"testing"
 )
@@ -443,4 +444,56 @@ func TestCache_EvictionSameKey(t *testing.T) {
 			t.Errorf("evictedKeys got: %v want: %v", evictedKeys, want)
 		}
 	})
+}
+
+
+// TestOnEvictDrainsAllBufferedEntries ensures eviction paths drain the full
+// buffered queue instead of keeping only the first entry and wiping the rest
+// (hashicorp/golang-lru#190).
+func TestOnEvictDrainsAllBufferedEntries(t *testing.T) {
+	var mu sync.Mutex
+	var got []int
+	onEvicted := func(k, v int) {
+		mu.Lock()
+		got = append(got, k)
+		mu.Unlock()
+		if k != v {
+			t.Errorf("evict key/value mismatch: %v != %v", k, v)
+		}
+	}
+
+	// Resize can buffer multiple evictions; all must be delivered.
+	c, err := NewWithEvict[int, int](2, onEvicted)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	c.Add(1, 1)
+	c.Add(2, 2)
+	if n := c.Resize(0); n != 2 {
+		t.Fatalf("Resize(0) evicted %d, want 2", n)
+	}
+	mu.Lock()
+	if len(got) != 2 {
+		t.Fatalf("Resize onEvict count=%d want 2; got=%v", len(got), got)
+	}
+	mu.Unlock()
+
+	// Sequential Add on a size-2 cache should fire once per capacity eviction.
+	got = got[:0]
+	c2, err := NewWithEvict[int, int](2, onEvicted)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	c2.Add(10, 10)
+	c2.Add(11, 11)
+	c2.Add(12, 12) // evicts 10
+	c2.Add(13, 13) // evicts 11
+	mu.Lock()
+	if len(got) != 2 {
+		t.Fatalf("sequential Add onEvict count=%d want 2; got=%v", len(got), got)
+	}
+	if got[0] != 10 || got[1] != 11 {
+		t.Fatalf("sequential Add onEvict order=%v want [10 11]", got)
+	}
+	mu.Unlock()
 }
