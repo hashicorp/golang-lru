@@ -132,16 +132,24 @@ func (c *LRU[K, V]) Add(key K, value V) (evicted bool) {
 }
 
 // Get looks up a key's value from the cache.
+// A successful Get renews the entry's TTL (sliding expiration).
 func (c *LRU[K, V]) Get(key K) (value V, ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	var ent *internal.Entry[K, V]
 	if ent, ok = c.items[key]; ok {
+		now := time.Now()
 		// Expired item check
-		if !c.cleanupStopped && time.Now().After(ent.ExpiresAt) {
+		if !c.cleanupStopped && now.After(ent.ExpiresAt) {
 			return value, false
 		}
 		c.evictList.MoveToFront(ent)
+		// Renew TTL on access so active keys do not expire while in use.
+		if c.ttl != noEvictionTTL {
+			c.removeFromBucket(ent)
+			ent.ExpiresAt = now.Add(c.ttl)
+			c.addToBucket(ent)
+		}
 		return ent.Value, true
 	}
 	return
