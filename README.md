@@ -61,7 +61,7 @@ func main() {
 	}
 
 	// wait for cache to expire
-	time.Sleep(time.Millisecond * 12)
+	time.Sleep(time.Millisecond * 150)
 
 	// get value under key1 after key expiration
 	r, ok = cache.Get("key1")
