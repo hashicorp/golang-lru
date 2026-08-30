@@ -622,3 +622,81 @@ func TestCache_RestartGoRoutine(t *testing.T) {
 		t.Errorf("expected keys to be empty")
 	}
 }
+
+// runWithDeadlockGuard runs fn in a goroutine and fails the test if fn hasn't returned
+// within the timeout, instead of hanging the whole test binary on a real deadlock.
+func runWithDeadlockGuard(t *testing.T, timeout time.Duration, fn func()) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		fn()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(timeout):
+		t.Fatal("deadlock: onEvict callback did not return in time, likely still holding the cache lock")
+	}
+}
+
+// TestLRU_OnEvictReentrantOnRemove reproduces the exact repro from the reported issue: an
+// onEvict callback that calls back into the cache from Remove must not deadlock on the
+// cache's own lock.
+func TestLRU_OnEvictReentrantOnRemove(t *testing.T) {
+	var lc *LRU[string, string]
+	var evictedLen int
+	lc = NewLRU(10, func(string, string) {
+		evictedLen = lc.Len()
+	}, time.Minute)
+
+	lc.Add("k", "v")
+	runWithDeadlockGuard(t, 2*time.Second, func() {
+		lc.Remove("k")
+	})
+	if evictedLen != 0 {
+		t.Fatalf("expected onEvict to see an empty cache, got len %d", evictedLen)
+	}
+}
+
+// TestLRU_OnEvictReentrantOnSizeEviction covers the other path removeElement is reached
+// from: Add evicting the oldest entry once the cache is over capacity.
+func TestLRU_OnEvictReentrantOnSizeEviction(t *testing.T) {
+	var lc *LRU[int, int]
+	var sawDuringEvict int
+	var reAdded bool
+	lc = NewLRU(1, func(int, int) {
+		sawDuringEvict = lc.Len()
+		if !reAdded {
+			reAdded = true
+			lc.Add(-1, -1) // re-add from inside the callback, another path back into the lock
+		}
+	}, time.Minute)
+
+	lc.Add(1, 1)
+	runWithDeadlockGuard(t, 2*time.Second, func() {
+		lc.Add(2, 2)
+	})
+	// Capacity is 1, so once the evicted entry is gone the newest addition
+	// already occupies the only slot: the callback sees a cache of length 1,
+	// not 0.
+	if sawDuringEvict != 1 {
+		t.Fatalf("expected onEvict to see the new entry already in place, got len %d", sawDuringEvict)
+	}
+	if _, ok := lc.Peek(-1); !ok {
+		t.Fatalf("expected the callback's own Add to have taken effect")
+	}
+}
+
+// TestLRU_OnEvictReentrantOnPurge covers Purge, which used to call onEvict inline while
+// iterating c.items under the lock.
+func TestLRU_OnEvictReentrantOnPurge(t *testing.T) {
+	var lc *LRU[string, string]
+	lc = NewLRU(10, func(string, string) {
+		lc.Contains("k") // any locking call back into the cache
+	}, time.Minute)
+
+	lc.Add("k", "v")
+	runWithDeadlockGuard(t, 2*time.Second, func() {
+		lc.Purge()
+	})
+}

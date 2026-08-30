@@ -25,6 +25,11 @@ type LRU[K comparable, V any] struct {
 	ttl  time.Duration
 	done chan struct{}
 
+	// evictedKeys and evictedVals buffer evictions collected while mu is
+	// held, so onEvict can be called after the caller releases the lock.
+	evictedKeys []K
+	evictedVals []V
+
 	// buckets for expiration
 	buckets []bucket[K, V]
 	// uint8 because it's number between 0 and numBuckets
@@ -85,10 +90,10 @@ func NewLRU[K comparable, V any](size int, onEvict EvictCallback[K, V], ttl time
 // onEvict is called for each evicted key.
 func (c *LRU[K, V]) Purge() {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	for k, v := range c.items {
 		if c.onEvict != nil {
-			c.onEvict(k, v.Value)
+			c.evictedKeys = append(c.evictedKeys, k)
+			c.evictedVals = append(c.evictedVals, v.Value)
 		}
 		delete(c.items, k)
 	}
@@ -98,6 +103,9 @@ func (c *LRU[K, V]) Purge() {
 		}
 	}
 	c.evictList.Init()
+	ks, vs := c.takeEvicted()
+	c.mu.Unlock()
+	c.invokeEvicted(ks, vs)
 }
 
 // Add adds a value to the cache. Returns true if an eviction occurred.
@@ -105,7 +113,6 @@ func (c *LRU[K, V]) Purge() {
 // or the size was not exceeded.
 func (c *LRU[K, V]) Add(key K, value V) (evicted bool) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	now := time.Now()
 
 	// Check for existing item
@@ -115,6 +122,7 @@ func (c *LRU[K, V]) Add(key K, value V) (evicted bool) {
 		ent.Value = value
 		ent.ExpiresAt = now.Add(c.ttl)
 		c.addToBucket(ent)
+		c.mu.Unlock()
 		return false
 	}
 
@@ -128,6 +136,9 @@ func (c *LRU[K, V]) Add(key K, value V) (evicted bool) {
 	if evict {
 		c.removeOldest()
 	}
+	ks, vs := c.takeEvicted()
+	c.mu.Unlock()
+	c.invokeEvicted(ks, vs)
 	return evict
 }
 
@@ -176,22 +187,26 @@ func (c *LRU[K, V]) Peek(key K) (value V, ok bool) {
 // key was contained.
 func (c *LRU[K, V]) Remove(key K) bool {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if ent, ok := c.items[key]; ok {
+	ent, ok := c.items[key]
+	if ok {
 		c.removeElement(ent)
-		return true
 	}
-	return false
+	ks, vs := c.takeEvicted()
+	c.mu.Unlock()
+	c.invokeEvicted(ks, vs)
+	return ok
 }
 
 // RemoveOldest removes the oldest item from the cache.
 func (c *LRU[K, V]) RemoveOldest() (key K, value V, ok bool) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if ent := c.evictList.Back(); ent != nil {
 		c.removeElement(ent)
-		return ent.Key, ent.Value, true
+		key, value, ok = ent.Key, ent.Value, true
 	}
+	ks, vs := c.takeEvicted()
+	c.mu.Unlock()
+	c.invokeEvicted(ks, vs)
 	return
 }
 
@@ -247,9 +262,9 @@ func (c *LRU[K, V]) Len() int {
 // Resize changes the cache size. Size of 0 means unlimited.
 func (c *LRU[K, V]) Resize(size int) (evicted int) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if size <= 0 {
 		c.size = 0
+		c.mu.Unlock()
 		return 0
 	}
 	diff := c.evictList.Length() - size
@@ -260,6 +275,9 @@ func (c *LRU[K, V]) Resize(size int) (evicted int) {
 		c.removeOldest()
 	}
 	c.size = size
+	ks, vs := c.takeEvicted()
+	c.mu.Unlock()
+	c.invokeEvicted(ks, vs)
 	return diff
 }
 
@@ -284,12 +302,34 @@ func (c *LRU[K, V]) removeOldest() {
 }
 
 // removeElement is used to remove a given list element from the cache. Has to be called with lock!
+// It buffers the evicted key/value on c.evictedKeys/c.evictedVals rather than calling onEvict
+// directly, so callers can invoke onEvict after releasing the lock. A callback that itself calls
+// back into the cache would otherwise deadlock on c.mu.
 func (c *LRU[K, V]) removeElement(e *internal.Entry[K, V]) {
 	c.evictList.Remove(e)
 	delete(c.items, e.Key)
 	c.removeFromBucket(e)
 	if c.onEvict != nil {
-		c.onEvict(e.Key, e.Value)
+		c.evictedKeys = append(c.evictedKeys, e.Key)
+		c.evictedVals = append(c.evictedVals, e.Value)
+	}
+}
+
+// takeEvicted returns and clears the evictions buffered by removeElement/Purge since the last
+// call. Has to be called with lock!
+func (c *LRU[K, V]) takeEvicted() (keys []K, vals []V) {
+	if len(c.evictedKeys) == 0 {
+		return nil, nil
+	}
+	keys, vals = c.evictedKeys, c.evictedVals
+	c.evictedKeys, c.evictedVals = nil, nil
+	return keys, vals
+}
+
+// invokeEvicted calls onEvict for each buffered eviction. Must be called without c.mu held.
+func (c *LRU[K, V]) invokeEvicted(keys []K, vals []V) {
+	for i := range keys {
+		c.onEvict(keys[i], vals[i])
 	}
 }
 
@@ -325,7 +365,9 @@ func (c *LRU[K, V]) deleteExpired() {
 		c.removeElement(ent)
 	}
 	c.nextCleanupBucket = (c.nextCleanupBucket + 1) % numBuckets
+	ks, vs := c.takeEvicted()
 	c.mu.Unlock()
+	c.invokeEvicted(ks, vs)
 }
 
 // addToBucket adds entry to expire bucket so that it will be cleaned up when the time comes. Has to be called with lock!
