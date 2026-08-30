@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -332,6 +333,36 @@ func TestLRUConcurrency(t *testing.T) {
 	wg.Wait()
 	if lc.Len() != 100 {
 		t.Fatalf("length differs from expected")
+	}
+}
+
+func TestLRUGetOrAddFuncConcurrency(t *testing.T) {
+	lc := NewLRU[string, string](0, nil, 0)
+	wg := sync.WaitGroup{}
+	wg.Add(1000)
+	var evictedCount int32
+	var addedCount int32
+	for i := 0; i < 1000; i++ {
+		go func(i int) {
+			_, added, evicted, _ := lc.GetOrAddFunc(fmt.Sprintf("key-%d", i/10), func() (string, error) { return fmt.Sprintf("val-%d", i/10), nil })
+			if evicted {
+				atomic.AddInt32(&evictedCount, 1)
+			}
+			if added {
+				atomic.AddInt32(&addedCount, 1)
+			}
+			wg.Done()
+		}(i)
+	}
+	wg.Wait()
+	if lc.Len() != 100 {
+		t.Fatalf("length differs from expected")
+	}
+	if addedCount != 100 {
+		t.Fatalf("GetOrAddFunc: unexpected added count %d", addedCount)
+	}
+	if evictedCount > 0 {
+		t.Fatalf("GetOrAddFunc: unexpected evicted count %d", evictedCount)
 	}
 }
 
