@@ -48,12 +48,11 @@ func main() {
 	// make cache with 10ms TTL and 5 max keys
 	cache := expirable.NewLRU[string, string](5, nil, time.Millisecond*10)
 
-
 	// set value under key1.
 	cache.Add("key1", "val1")
 
-	// get value under key1
-	r, ok := cache.Get("key1")
+	// get value under key1 and renew its TTL.
+	r, ok := cache.GetAndRefresh("key1")
 
 	// check for OK value
 	if ok {
