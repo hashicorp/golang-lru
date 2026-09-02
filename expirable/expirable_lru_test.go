@@ -422,6 +422,35 @@ func TestLoadingExpired(t *testing.T) {
 	}
 }
 
+func TestAddReplacesExpiredCallsOnEvict(t *testing.T) {
+	var evicted []string
+	ttl := 30 * time.Millisecond
+	cache := NewLRU[string, string](0, func(k, v string) {
+		evicted = append(evicted, k+":"+v)
+	}, ttl)
+	defer cache.Close()
+
+	cache.Add("k", "old")
+	deadline := time.Now().Add(ttl + 20*time.Millisecond)
+	for time.Now().Before(deadline) {
+		if _, ok := cache.Get("k"); !ok {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if _, ok := cache.Get("k"); ok {
+		t.Fatal("expected key to expire")
+	}
+
+	cache.Add("k", "new")
+	if len(evicted) == 0 {
+		t.Fatal("expected onEvict for the expired value")
+	}
+	if evicted[0] != "k:old" {
+		t.Fatalf("onEvict = %v, want k:old first", evicted)
+	}
+}
+
 func TestLRURemoveOldest(t *testing.T) {
 	lc := NewLRU[string, string](2, nil, 0)
 
