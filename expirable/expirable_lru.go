@@ -110,11 +110,16 @@ func (c *LRU[K, V]) Add(key K, value V) (evicted bool) {
 
 	// Check for existing item
 	if ent, ok := c.items[key]; ok {
+		expired := !c.cleanupStopped && now.After(ent.ExpiresAt)
+		oldVal := ent.Value
 		c.evictList.MoveToFront(ent)
 		c.removeFromBucket(ent) // remove the entry from its current bucket as expiresAt is renewed
 		ent.Value = value
 		ent.ExpiresAt = now.Add(c.ttl)
 		c.addToBucket(ent)
+		if expired && c.onEvict != nil {
+			c.onEvict(key, oldVal)
+		}
 		return false
 	}
 
