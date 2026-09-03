@@ -60,8 +60,8 @@ func main() {
 		fmt.Printf("value before expiration is found: %v, value: %q\n", ok, r)
 	}
 
-	// wait for cache to expire
-	time.Sleep(time.Millisecond * 12)
+	// wait for cache to expire and for the periodic cleanup goroutine to run
+	time.Sleep(time.Millisecond * 100)
 
 	// get value under key1 after key expiration
 	r, ok = cache.Get("key1")
