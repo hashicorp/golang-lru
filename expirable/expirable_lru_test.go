@@ -1,4 +1,4 @@
-// Copyright IBM Corp. 2014, 2025
+// Copyright IBM Corp. 2014, 2026
 // SPDX-License-Identifier: MPL-2.0
 
 package expirable
@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -620,5 +621,100 @@ func TestCache_RestartGoRoutine(t *testing.T) {
 	keys := cache.Keys()
 	if len(keys) != 0 {
 		t.Errorf("expected keys to be empty")
+	}
+}
+
+// runWithTimeout runs fn and fails the test if it does not return within the
+// timeout, e.g. because it deadlocked.
+func runWithTimeout(t *testing.T, name string, fn func()) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		fn()
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("%s deadlocked: onEvict re-entry blocked on the cache lock", name)
+	}
+}
+
+// TestOnEvictReentrant verifies that the onEvict callback may safely
+// re-enter the cache. Previously the callback was invoked while holding the
+// cache lock, so any re-entrant call deadlocked.
+func TestOnEvictReentrant(t *testing.T) {
+	newCache := func() *LRU[string, string] {
+		var c *LRU[string, string]
+		c = NewLRU[string, string](2, func(k, v string) {
+			// Re-enter the cache from inside the eviction callback.
+			c.Len()
+			c.Get("other")
+			c.Keys()
+		}, time.Minute)
+		return c
+	}
+
+	t.Run("Remove", func(t *testing.T) {
+		c := newCache()
+		c.Add("k", "v")
+		runWithTimeout(t, "Remove", func() { c.Remove("k") })
+	})
+
+	t.Run("Add eviction", func(t *testing.T) {
+		c := newCache()
+		c.Add("a", "1")
+		c.Add("b", "2")
+		runWithTimeout(t, "Add", func() { c.Add("c", "3") }) // evicts "a"
+	})
+
+	t.Run("RemoveOldest", func(t *testing.T) {
+		c := newCache()
+		c.Add("a", "1")
+		runWithTimeout(t, "RemoveOldest", func() { c.RemoveOldest() })
+	})
+
+	t.Run("Purge", func(t *testing.T) {
+		c := newCache()
+		c.Add("a", "1")
+		runWithTimeout(t, "Purge", func() { c.Purge() })
+	})
+
+	t.Run("Resize", func(t *testing.T) {
+		c := newCache()
+		c.Add("a", "1")
+		c.Add("b", "2")
+		runWithTimeout(t, "Resize", func() { c.Resize(1) }) // evicts "a"
+	})
+
+	t.Run("deleteExpired", func(t *testing.T) {
+		var calls int32
+		var c *LRU[string, string]
+		c = NewLRU[string, string](2, func(k, v string) {
+			atomic.AddInt32(&calls, 1)
+			c.Len() // re-enter from the cleanup goroutine
+		}, 20*time.Millisecond)
+		c.Add("k", "v")
+
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			if atomic.LoadInt32(&calls) > 0 {
+				return // callback ran and re-entered without deadlocking
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+		t.Fatal("eviction callback was never invoked by the cleanup goroutine")
+	})
+}
+
+// TestOnEvictStillSynced verifies the callback keeps running synchronously,
+// before the removing method returns.
+func TestOnEvictStillSynced(t *testing.T) {
+	var called bool
+	c := NewLRU[string, string](2, func(k, v string) { called = true }, time.Minute)
+	c.Add("k", "v")
+	c.Remove("k")
+	if !called {
+		t.Fatal("onEvict must run before Remove returns")
 	}
 }
