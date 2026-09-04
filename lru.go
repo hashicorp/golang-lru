@@ -81,8 +81,7 @@ func (c *Cache[K, V]) Add(key K, value V) (evicted bool) {
 	c.lock.Lock()
 	evicted = c.lru.Add(key, value)
 	if c.onEvictedCB != nil && evicted {
-		k, v = c.evictedKeys[0], c.evictedVals[0]
-		c.evictedKeys, c.evictedVals = c.evictedKeys[:0], c.evictedVals[:0]
+		k, v = c.clearEvictedKV()
 	}
 	c.lock.Unlock()
 	if c.onEvictedCB != nil && evicted {
@@ -130,8 +129,7 @@ func (c *Cache[K, V]) ContainsOrAdd(key K, value V) (ok, evicted bool) {
 	}
 	evicted = c.lru.Add(key, value)
 	if c.onEvictedCB != nil && evicted {
-		k, v = c.evictedKeys[0], c.evictedVals[0]
-		c.evictedKeys, c.evictedVals = c.evictedKeys[:0], c.evictedVals[:0]
+		k, v = c.clearEvictedKV()
 	}
 	c.lock.Unlock()
 	if c.onEvictedCB != nil && evicted {
@@ -154,8 +152,7 @@ func (c *Cache[K, V]) PeekOrAdd(key K, value V) (previous V, ok, evicted bool) {
 	}
 	evicted = c.lru.Add(key, value)
 	if c.onEvictedCB != nil && evicted {
-		k, v = c.evictedKeys[0], c.evictedVals[0]
-		c.evictedKeys, c.evictedVals = c.evictedKeys[:0], c.evictedVals[:0]
+		k, v = c.clearEvictedKV()
 	}
 	c.lock.Unlock()
 	if c.onEvictedCB != nil && evicted {
@@ -171,8 +168,7 @@ func (c *Cache[K, V]) Remove(key K) (present bool) {
 	c.lock.Lock()
 	present = c.lru.Remove(key)
 	if c.onEvictedCB != nil && present {
-		k, v = c.evictedKeys[0], c.evictedVals[0]
-		c.evictedKeys, c.evictedVals = c.evictedKeys[:0], c.evictedVals[:0]
+		k, v = c.clearEvictedKV()
 	}
 	c.lock.Unlock()
 	if c.onEvictedCB != nil && present {
@@ -207,8 +203,7 @@ func (c *Cache[K, V]) RemoveOldest() (key K, value V, ok bool) {
 	c.lock.Lock()
 	key, value, ok = c.lru.RemoveOldest()
 	if c.onEvictedCB != nil && ok {
-		k, v = c.evictedKeys[0], c.evictedVals[0]
-		c.evictedKeys, c.evictedVals = c.evictedKeys[:0], c.evictedVals[:0]
+		k, v = c.clearEvictedKV()
 	}
 	c.lock.Unlock()
 	if c.onEvictedCB != nil && ok {
@@ -251,5 +246,15 @@ func (c *Cache[K, V]) Len() int {
 
 // Cap returns the capacity of the cache
 func (c *Cache[K, V]) Cap() int {
-	return c.lru.Cap()
+	c.lock.RLock()
+	ret := c.lru.Cap()
+	c.lock.RUnlock()
+	return ret
+}
+
+// clearEvictedKV returns the first k/v, clean the evictedKeys and evictedVals
+func (c *Cache[K, V]) clearEvictedKV() (K, V) {
+	k, v := c.evictedKeys[0], c.evictedVals[0]
+	c.evictedKeys, c.evictedVals = c.evictedKeys[:0], c.evictedVals[:0]
+	return k, v
 }
