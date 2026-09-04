@@ -91,12 +91,30 @@ func (c *Cache[K, V]) Add(key K, value V) (evicted bool) {
 	return
 }
 
+// MAdd adds many values to the cache. Returns true if an eviction occurred.
+func (c *Cache) MAdd(keys, values []interface{}, evicteds []bool) {
+	c.lock.Lock()
+	for i, key := range keys {
+		evicteds[i] = c.lru.Add(key, values[i])
+	}
+	c.lock.Unlock()
+}
+
 // Get looks up a key's value from the cache.
 func (c *Cache[K, V]) Get(key K) (value V, ok bool) {
 	c.lock.Lock()
 	value, ok = c.lru.Get(key)
 	c.lock.Unlock()
 	return value, ok
+}
+
+// MGet looks up many keys's value from the cache.
+func (c *Cache) MGet(keys, values []interface{}, oks []bool) {
+	c.lock.Lock()
+	for i, key := range keys {
+		values[i], oks[i] = c.lru.Get(key)
+	}
+	c.lock.Unlock()
 }
 
 // Contains checks if a key is in the cache, without updating the
