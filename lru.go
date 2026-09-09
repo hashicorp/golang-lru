@@ -91,6 +91,31 @@ func (c *Cache[K, V]) Add(key K, value V) (evicted bool) {
 	return
 }
 
+// AddIf adds a value to the cache if the key is not already present, or if
+// replace returns true given the existing and new values. The replace function
+// is not called when the key is absent. If replace is nil, an existing value
+// is left unchanged.
+//
+// replace is invoked while the cache lock is held and must not call methods
+// on the cache.
+//
+// Returns whether the cache was updated and whether an eviction occurred.
+func (c *Cache[K, V]) AddIf(key K, value V, replace func(old V, new V) bool) (updated, evicted bool) {
+	var k K
+	var v V
+	c.lock.Lock()
+	updated, evicted = c.lru.AddIf(key, value, replace)
+	if c.onEvictedCB != nil && evicted {
+		k, v = c.evictedKeys[0], c.evictedVals[0]
+		c.evictedKeys, c.evictedVals = c.evictedKeys[:0], c.evictedVals[:0]
+	}
+	c.lock.Unlock()
+	if c.onEvictedCB != nil && evicted {
+		c.onEvictedCB(k, v)
+	}
+	return
+}
+
 // Get looks up a key's value from the cache.
 func (c *Cache[K, V]) Get(key K) (value V, ok bool) {
 	c.lock.Lock()

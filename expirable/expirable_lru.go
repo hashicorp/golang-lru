@@ -170,6 +170,50 @@ func (c *LRU[K, V]) Add(key K, value V) (evicted bool) {
 	return evict
 }
 
+// AddIf adds a value to the cache if the key is not already present, or if
+// replace returns true given the existing and new values. The replace function
+// is not called when the key is absent. If replace is nil, an existing value
+// is left unchanged.
+//
+// replace is invoked while the cache lock is held and must not call methods
+// on the cache.
+//
+// Returns whether the cache was updated and whether an eviction occurred.
+// Replacing an existing entry renews its TTL. A rejected update does not
+// change recency or TTL. If an eviction occurred, onEvict is invoked for the
+// evicted entry outside the cache's internal lock.
+func (c *LRU[K, V]) AddIf(key K, value V, replace func(old V, new V) bool) (updated, evicted bool) {
+	var evictedEntries []evictedEntry[K, V]
+	c.mu.Lock()
+	defer func() {
+		c.mu.Unlock()
+		c.fireCallbacks(evictedEntries)
+	}()
+	now := time.Now()
+
+	if ent, ok := c.items[key]; ok {
+		if replace == nil || !replace(ent.Value, value) {
+			return false, false
+		}
+		c.evictList.MoveToFront(ent)
+		c.removeFromBucket(ent) // remove the entry from its current bucket as expiresAt is renewed
+		ent.Value = value
+		ent.ExpiresAt = now.Add(c.ttl)
+		c.addToBucket(ent)
+		return true, false
+	}
+
+	ent := c.evictList.PushFrontExpirable(key, value, now.Add(c.ttl))
+	c.items[key] = ent
+	c.addToBucket(ent)
+
+	evict := c.size > 0 && c.evictList.Length() > c.size
+	if evict {
+		c.removeOldest(&evictedEntries)
+	}
+	return true, evict
+}
+
 // Get looks up a key's value from the cache.
 func (c *LRU[K, V]) Get(key K) (value V, ok bool) {
 	c.mu.Lock()

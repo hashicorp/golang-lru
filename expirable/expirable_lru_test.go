@@ -127,6 +127,41 @@ func TestLRUInterface(_ *testing.T) {
 	var _ simplelru.LRUCache[int, int] = &LRU[int, int]{}
 }
 
+func TestLRU_AddIf(t *testing.T) {
+	newer := func(old, new int) bool { return new > old }
+	lc := NewLRU[int, int](2, nil, 0)
+
+	updated, evicted := lc.AddIf(1, 1, newer)
+	if !updated || evicted {
+		t.Fatalf("expected insert without eviction, updated=%v evicted=%v", updated, evicted)
+	}
+
+	updated, evicted = lc.AddIf(1, 2, newer)
+	if !updated || evicted {
+		t.Fatalf("expected replace without eviction, updated=%v evicted=%v", updated, evicted)
+	}
+	if v, ok := lc.Peek(1); !ok || v != 2 {
+		t.Fatalf("expected 2, got %v, %v", v, ok)
+	}
+
+	updated, evicted = lc.AddIf(1, 1, newer)
+	if updated || evicted {
+		t.Fatalf("expected stale value to be rejected, updated=%v evicted=%v", updated, evicted)
+	}
+	if v, ok := lc.Peek(1); !ok || v != 2 {
+		t.Fatalf("expected 2, got %v, %v", v, ok)
+	}
+
+	lc.AddIf(2, 2, newer)
+	updated, evicted = lc.AddIf(3, 3, newer)
+	if !updated || !evicted {
+		t.Fatalf("expected insert with eviction, updated=%v evicted=%v", updated, evicted)
+	}
+	if lc.Contains(1) {
+		t.Fatalf("1 should have been evicted")
+	}
+}
+
 func TestLRUNoPurge(t *testing.T) {
 	lc := NewLRU[string, string](10, nil, 0)
 

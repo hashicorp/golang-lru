@@ -10,6 +10,11 @@ type LRUCache[K comparable, V any] interface {
 	// updates the "recently used"-ness of the key.
 	Add(key K, value V) bool
 
+	// AddIf adds a value if the key is not present, or if replace returns true
+	// given the existing and new values. Returns whether the cache was updated
+	// and whether an eviction occurred.
+	AddIf(key K, value V, replace func(old V, new V) bool) (updated, evicted bool)
+
 	// Returns key's value from the cache and
 	// updates the "recently used"-ness of the key. #value, isFound
 	Get(key K) (value V, ok bool)

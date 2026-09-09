@@ -67,6 +67,34 @@ func (c *LRU[K, V]) Add(key K, value V) (evicted bool) {
 	return evict
 }
 
+// AddIf adds a value to the cache if the key is not already present, or if
+// replace returns true given the existing and new values. The replace function
+// is not called when the key is absent. If replace is nil, an existing value
+// is left unchanged.
+//
+// Returns whether the cache was updated and whether an eviction occurred.
+// Updating an existing entry does not evict. A rejected update does not change
+// the "recently used"-ness of the key.
+func (c *LRU[K, V]) AddIf(key K, value V, replace func(old V, new V) bool) (updated, evicted bool) {
+	if ent, ok := c.items[key]; ok {
+		if replace == nil || !replace(ent.Value, value) {
+			return false, false
+		}
+		c.evictList.MoveToFront(ent)
+		ent.Value = value
+		return true, false
+	}
+
+	ent := c.evictList.PushFront(key, value)
+	c.items[key] = ent
+
+	evict := c.evictList.Length() > c.size
+	if evict {
+		c.removeOldest()
+	}
+	return true, evict
+}
+
 // Get looks up a key's value from the cache.
 func (c *LRU[K, V]) Get(key K) (value V, ok bool) {
 	if ent, ok := c.items[key]; ok {

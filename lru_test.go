@@ -158,6 +158,60 @@ func TestLRUAdd(t *testing.T) {
 	}
 }
 
+func TestLRUAddIf(t *testing.T) {
+	type item struct {
+		version int
+		data    string
+	}
+	newer := func(old, new item) bool { return new.version > old.version }
+
+	l, err := New[string, item](2)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	updated, evicted := l.AddIf("k", item{version: 1, data: "a"}, newer)
+	if !updated || evicted {
+		t.Errorf("expected insert without eviction, updated=%v evicted=%v", updated, evicted)
+	}
+
+	updated, evicted = l.AddIf("k", item{version: 2, data: "b"}, newer)
+	if !updated || evicted {
+		t.Errorf("expected replace without eviction, updated=%v evicted=%v", updated, evicted)
+	}
+	if v, ok := l.Peek("k"); !ok || v.data != "b" || v.version != 2 {
+		t.Errorf("expected newest item, got %+v ok=%v", v, ok)
+	}
+
+	updated, evicted = l.AddIf("k", item{version: 1, data: "stale"}, newer)
+	if updated || evicted {
+		t.Errorf("expected stale value to be rejected, updated=%v evicted=%v", updated, evicted)
+	}
+	if v, ok := l.Peek("k"); !ok || v.data != "b" {
+		t.Errorf("expected cached newest item, got %+v ok=%v", v, ok)
+	}
+}
+
+func TestLRUAddIfEviction(t *testing.T) {
+	evictCounter := 0
+	l, err := NewWithEvict(1, func(k int, v int) { evictCounter++ })
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	newer := func(old, new int) bool { return new > old }
+	l.Add(1, 1)
+	updated, evicted := l.AddIf(2, 2, newer)
+	if !updated || !evicted || evictCounter != 1 {
+		t.Errorf("expected insert with eviction, updated=%v evicted=%v count=%d", updated, evicted, evictCounter)
+	}
+
+	updated, evicted = l.AddIf(2, 3, newer)
+	if !updated || evicted || evictCounter != 1 {
+		t.Errorf("replace should not evict, updated=%v evicted=%v count=%d", updated, evicted, evictCounter)
+	}
+}
+
 // test that Contains doesn't update recent-ness
 func TestLRUContains(t *testing.T) {
 	l, err := New[int, int](2)

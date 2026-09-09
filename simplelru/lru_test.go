@@ -137,6 +137,137 @@ func TestLRU_Add(t *testing.T) {
 	}
 }
 
+func TestLRU_AddIf(t *testing.T) {
+	newer := func(old, new int) bool { return new > old }
+
+	t.Run("inserts when missing", func(t *testing.T) {
+		l, err := NewLRU[int, int](2, nil)
+		if err != nil {
+			t.Fatalf("err: %v", err)
+		}
+
+		updated, evicted := l.AddIf(1, 10, newer)
+		if !updated {
+			t.Errorf("expected insert")
+		}
+		if evicted {
+			t.Errorf("expected no eviction")
+		}
+		if v, ok := l.Peek(1); !ok || v != 10 {
+			t.Errorf("expected 10, got %v, %v", v, ok)
+		}
+	})
+
+	t.Run("replaces when replace returns true", func(t *testing.T) {
+		l, err := NewLRU[int, int](2, nil)
+		if err != nil {
+			t.Fatalf("err: %v", err)
+		}
+
+		l.Add(1, 1)
+		updated, evicted := l.AddIf(1, 2, newer)
+		if !updated {
+			t.Errorf("expected replace")
+		}
+		if evicted {
+			t.Errorf("expected no eviction")
+		}
+		if v, ok := l.Peek(1); !ok || v != 2 {
+			t.Errorf("expected 2, got %v, %v", v, ok)
+		}
+	})
+
+	t.Run("keeps old when replace returns false", func(t *testing.T) {
+		l, err := NewLRU[int, int](2, nil)
+		if err != nil {
+			t.Fatalf("err: %v", err)
+		}
+
+		l.Add(1, 5)
+		updated, evicted := l.AddIf(1, 3, newer)
+		if updated {
+			t.Errorf("expected no update")
+		}
+		if evicted {
+			t.Errorf("expected no eviction")
+		}
+		if v, ok := l.Peek(1); !ok || v != 5 {
+			t.Errorf("expected 5, got %v, %v", v, ok)
+		}
+	})
+
+	t.Run("nil replace keeps existing", func(t *testing.T) {
+		l, err := NewLRU[int, int](2, nil)
+		if err != nil {
+			t.Fatalf("err: %v", err)
+		}
+
+		l.Add(1, 1)
+		updated, _ := l.AddIf(1, 2, nil)
+		if updated {
+			t.Errorf("expected no update with nil replace")
+		}
+		if v, ok := l.Peek(1); !ok || v != 1 {
+			t.Errorf("expected 1, got %v, %v", v, ok)
+		}
+
+		updated, _ = l.AddIf(2, 2, nil)
+		if !updated {
+			t.Errorf("expected insert of missing key with nil replace")
+		}
+	})
+
+	t.Run("rejected update does not change recency", func(t *testing.T) {
+		l, err := NewLRU[int, int](2, nil)
+		if err != nil {
+			t.Fatalf("err: %v", err)
+		}
+
+		l.Add(1, 10)
+		l.Add(2, 2)
+		l.AddIf(1, 1, newer)
+		l.Add(3, 3)
+		if l.Contains(1) {
+			t.Errorf("rejected update should not have refreshed recency of 1")
+		}
+	})
+
+	t.Run("accepted update refreshes recency", func(t *testing.T) {
+		l, err := NewLRU[int, int](2, nil)
+		if err != nil {
+			t.Fatalf("err: %v", err)
+		}
+
+		l.Add(1, 1)
+		l.Add(2, 2)
+		l.AddIf(1, 10, newer)
+		l.Add(3, 3)
+		if !l.Contains(1) {
+			t.Errorf("accepted update should have refreshed recency of 1")
+		}
+		if l.Contains(2) {
+			t.Errorf("2 should have been evicted")
+		}
+		if v, ok := l.Peek(1); !ok || v != 10 {
+			t.Errorf("expected 10, got %v, %v", v, ok)
+		}
+	})
+
+	t.Run("insert can evict", func(t *testing.T) {
+		evictCounter := 0
+		l, err := NewLRU(1, func(k int, v int) { evictCounter++ })
+		if err != nil {
+			t.Fatalf("err: %v", err)
+		}
+
+		l.Add(1, 1)
+		updated, evicted := l.AddIf(2, 2, newer)
+		if !updated || !evicted || evictCounter != 1 {
+			t.Errorf("expected insert with eviction, updated=%v evicted=%v count=%d", updated, evicted, evictCounter)
+		}
+	})
+}
+
 // Test that Contains doesn't update recent-ness
 func TestLRU_Contains(t *testing.T) {
 	l, err := NewLRU[int, int](2, nil)
