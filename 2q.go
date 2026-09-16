@@ -63,6 +63,10 @@ func New2QParams[K comparable, V any](size int, recentRatio, ghostRatio float64)
 	// Determine the sub-sizes
 	recentSize := int(float64(size) * recentRatio)
 	evictSize := int(float64(size) * ghostRatio)
+	if evictSize < 1 {
+		// int(size * ratio) truncates to 0 for small sizes (e.g. size=1).
+		evictSize = 1
+	}
 
 	// Allocate the LRUs
 	recent, err := simplelru.NewLRU[K, V](size, nil)
@@ -188,6 +192,9 @@ func (c *TwoQueueCache[K, V]) Resize(size int) (evicted int) {
 	// Recalculate the sub-sizes
 	recentSize := int(float64(size) * c.recentRatio)
 	evictSize := int(float64(size) * c.ghostRatio)
+	if evictSize < 1 {
+		evictSize = 1
+	}
 	c.size = size
 	c.recentSize = recentSize
 

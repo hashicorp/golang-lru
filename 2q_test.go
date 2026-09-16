@@ -358,6 +358,27 @@ func Test2Q_Contains(t *testing.T) {
 	}
 }
 
+func Test2Q_Size1(t *testing.T) {
+	l, err := New2Q[int, int](1)
+	if err != nil {
+		t.Fatalf("New2Q(1): %v", err)
+	}
+	l.Add(1, 1)
+	if v, ok := l.Get(1); !ok || v != 1 {
+		t.Fatalf("expected key 1 after Add, got %v, %v", v, ok)
+	}
+	if n := l.Len(); n != 1 {
+		t.Fatalf("bad len: %d", n)
+	}
+	l.Add(2, 2)
+	if l.Len() != 1 {
+		t.Fatalf("size-1 cache should still have len 1, got %d", l.Len())
+	}
+	if _, ok := l.Get(2); !ok {
+		t.Fatalf("expected newest key 2 to be present")
+	}
+}
+
 // Test that Peek doesn't update recent-ness
 func Test2Q_Peek(t *testing.T) {
 	l, err := New2Q[int, int](2)
