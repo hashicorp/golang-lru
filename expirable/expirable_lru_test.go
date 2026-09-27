@@ -401,9 +401,13 @@ func TestLoadingExpired(t *testing.T) {
 		}
 	}
 
-	time.Sleep(time.Millisecond * 100) // wait for expiration reaper
-	if lc.Len() != 0 {
-		t.Fatalf("length differs from expected")
+	// Reaper can take >100ms under GOMAXPROCS=1 (#236); poll instead.
+	deadline := time.Now().Add(2 * time.Second)
+	for lc.Len() != 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("length differs from expected: still %d after waiting for reaper", lc.Len())
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 
 	v, ok = lc.Peek("key1")
