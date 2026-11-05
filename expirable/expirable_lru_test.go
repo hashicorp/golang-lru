@@ -423,6 +423,35 @@ func TestLoadingExpired(t *testing.T) {
 	}
 }
 
+func TestSub100nsTTLDoesNotPanic(t *testing.T) {
+	// Positive TTLs below 100ns used to make time.NewTicker panic in the
+	// cleanup goroutine because ttl/numBuckets truncates to 0.
+	errCh := make(chan error, 1)
+	go func() {
+		lc := NewLRU[int, int](1, nil, time.Nanosecond)
+		lc.Add(1, 1)
+		deadline := time.Now().Add(200 * time.Millisecond)
+		for time.Now().Before(deadline) {
+			if _, ok := lc.Get(1); !ok {
+				lc.Close()
+				errCh <- nil
+				return
+			}
+			time.Sleep(time.Millisecond)
+		}
+		lc.Close()
+		errCh <- fmt.Errorf("entry with 1ns TTL did not expire")
+	}()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("constructor or cleanup hung / panicked process")
+	}
+}
+
 func TestLRURemoveOldest(t *testing.T) {
 	lc := NewLRU[string, string](2, nil, 0)
 

@@ -64,7 +64,8 @@ const numBuckets = 100
 // onEvict, if non-nil, is invoked for each evicted entry outside the cache's
 // internal lock; see EvictCallback for the guarantees callbacks get.
 //
-// Delete expired entries every 1/100th of ttl value. Goroutine which deletes expired entries runs indefinitely.
+// Delete expired entries every 1/100th of ttl value (at least 1ns). Goroutine which
+// deletes expired entries runs indefinitely.
 func NewLRU[K comparable, V any](size int, onEvict EvictCallback[K, V], ttl time.Duration) *LRU[K, V] {
 	if size < 0 {
 		size = 0
@@ -430,7 +431,13 @@ func (c *LRU[K, V]) startGoroutine() {
 	}
 
 	go func(done <-chan struct{}) {
-		ticker := time.NewTicker(c.ttl / numBuckets)
+		// ttl/numBuckets can be 0 for positive TTLs below 100ns; time.NewTicker
+		// panics on a non-positive interval, so clamp to 1ns.
+		interval := c.ttl / numBuckets
+		if interval <= 0 {
+			interval = time.Nanosecond
+		}
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
 			select {
